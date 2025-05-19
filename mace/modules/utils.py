@@ -10,7 +10,6 @@ from typing import Dict, List, NamedTuple, Optional, Tuple
 import numpy as np
 import torch
 import torch.utils.data
-from scipy.constants import c, e
 
 from mace.tools import to_numpy
 from mace.tools.scatter import scatter_mean, scatter_std, scatter_sum
@@ -484,7 +483,8 @@ def compute_fixed_charge_dipole(
     batch: torch.Tensor,
     num_graphs: int,
 ) -> torch.Tensor:
-    mu = positions * charges.unsqueeze(-1) / (1e-11 / c / e)  # [N_atoms,3]
+    # mu has the unit of e*angstrom
+    mu = positions * charges.unsqueeze(-1)  # [N_atoms,3]
     return scatter_sum(
         src=mu, index=batch.unsqueeze(-1), dim=0, dim_size=num_graphs
     )  # [N_graphs,3]
