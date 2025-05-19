@@ -676,7 +676,7 @@ class AtomicDipolesMACE(torch.nn.Module):
             dim=0,
             dim_size=num_graphs,
         )  # [n_graphs,3]
-        baseline = compute_fixed_charge_dipole(
+        baseline, baseline_atomic = compute_fixed_charge_dipole(
             charges=data["charges"],
             positions=data["positions"],
             batch=data["batch"],
@@ -914,7 +914,7 @@ class EnergyDipolesMACE(torch.nn.Module):
             dim=0,
             dim_size=num_graphs,
         )  # [n_graphs,3]
-        baseline = compute_fixed_charge_dipole(
+        baseline, baseline_atomic = compute_fixed_charge_dipole(
             charges=data["charges"],
             positions=data["positions"],
             batch=data["batch"],

@@ -482,12 +482,12 @@ def compute_fixed_charge_dipole(
     positions: torch.Tensor,
     batch: torch.Tensor,
     num_graphs: int,
-) -> torch.Tensor:
+) -> Tuple[torch.Tensor,torch.Tensor]:
     # mu has the unit of e*angstrom
     mu = positions * charges.unsqueeze(-1)  # [N_atoms,3]
     return scatter_sum(
         src=mu, index=batch.unsqueeze(-1), dim=0, dim_size=num_graphs
-    )  # [N_graphs,3]
+    ), mu  # [N_graphs,3]
 
 
 class InteractionKwargs(NamedTuple):
