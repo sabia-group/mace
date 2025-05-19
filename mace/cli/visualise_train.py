@@ -69,25 +69,25 @@ error_type = {
     ),
     "DipoleRMSE": (
         [
-            ("rmse_mu_per_atom", "RMSE MU/atom [mDebye]"),
+            ("rmse_mu_per_atom", "RMSE MU/atom [me*ang]"),
             ("rel_rmse_f", "Relative MU RMSE [%]"),
         ],
-        [("dipole", "Dipole per atom [Debye]")],
+        [("dipole", "Dipole per atom [e*ang]")],
     ),
     "DipoleMAE": (
-        [("mae_mu", "MAE MU [mDebye]"), ("rel_mae_f", "Relative MU MAE [%]")],
-        [("dipole", "Dipole per atom [Debye]")],
+        [("mae_mu", "MAE MU [me*ang]"), ("rel_mae_f", "Relative MU MAE [%]")],
+        [("dipole", "Dipole per atom [e*ang]")],
     ),
     "EnergyDipoleRMSE": (
         [
             ("rmse_e_per_atom", "RMSE E/atom [meV]"),
             ("rmse_f", "RMSE F [meV / A]"),
-            ("rmse_mu_per_atom", "RMSE MU/atom [mDebye]"),
+            ("rmse_mu_per_atom", "RMSE MU/atom [me*ang]"),
         ],
         [
             ("energy", "Energy per atom [eV]"),
             ("force", "Force [eV / A]"),
-            ("dipole", "Dipole per atom [Debye]"),
+            ("dipole", "Dipole per atom [e*ang]"),
         ],
     ),
 }

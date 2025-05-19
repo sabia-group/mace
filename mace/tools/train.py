@@ -127,14 +127,14 @@ def valid_err_log(
     elif log_errors == "DipoleRMSE":
         error_mu = eval_metrics["rmse_mu_per_atom"] * 1e3
         logging.info(
-            f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, RMSE_MU_per_atom={error_mu:8.2f} mDebye",
+            f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, RMSE_MU_per_atom={error_mu:8.2f} me*ang",
         )
     elif log_errors == "EnergyDipoleRMSE":
         error_e = eval_metrics["rmse_e_per_atom"] * 1e3
         error_f = eval_metrics["rmse_f"] * 1e3
         error_mu = eval_metrics["rmse_mu_per_atom"] * 1e3
         logging.info(
-            f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, RMSE_E_per_atom={error_e:8.2f} meV, RMSE_F={error_f:8.2f} meV / A, RMSE_Mu_per_atom={error_mu:8.2f} mDebye",
+            f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, RMSE_E_per_atom={error_e:8.2f} meV, RMSE_F={error_f:8.2f} meV / A, RMSE_Mu_per_atom={error_mu:8.2f} me*ang",
         )
 
 
