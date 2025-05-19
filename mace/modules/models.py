@@ -670,7 +670,7 @@ class AtomicDipolesMACE(torch.nn.Module):
             dipoles, dim=-1
         )  # [n_nodes,3,n_contributions]
         atomic_dipoles = torch.sum(contributions_dipoles, dim=-1)  # [n_nodes,3]
-        total_dipole = scatter_sum(
+        delta_dipole = scatter_sum(
             src=atomic_dipoles,
             index=data["batch"],
             dim=0,
@@ -682,7 +682,7 @@ class AtomicDipolesMACE(torch.nn.Module):
             batch=data["batch"],
             num_graphs=num_graphs,
         )  # [n_graphs,3]
-        total_dipole = total_dipole + baseline
+        total_dipole = delta_dipole + baseline
 
         output = {
             "dipole": total_dipole,
@@ -908,7 +908,7 @@ class EnergyDipolesMACE(torch.nn.Module):
             dipoles, dim=-1
         )  # [n_nodes,3,n_contributions]
         atomic_dipoles = torch.sum(contributions_dipoles, dim=-1)  # [n_nodes,3]
-        total_dipole = scatter_sum(
+        delta_dipole = scatter_sum(
             src=atomic_dipoles,
             index=data["batch"].unsqueeze(-1),
             dim=0,
@@ -920,7 +920,7 @@ class EnergyDipolesMACE(torch.nn.Module):
             batch=data["batch"],
             num_graphs=num_graphs,
         )  # [n_graphs,3]
-        total_dipole = total_dipole + baseline
+        total_dipole = delta_dipole + baseline
 
         forces, virials, stress, _, _ = get_outputs(
             energy=total_energy,
