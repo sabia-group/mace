@@ -954,6 +954,7 @@ def get_dipole_outputs(atomic_dipoles,data,*argv,**kwargs):
     Returns:
         Dict[str, torch.Tensor]: Dictionary containing the dipole outputs.
     """
+    num_graphs = data["ptr"].numel() - 1
     delta_dipole = scatter_sum(
         src=atomic_dipoles,
         index=data["batch"].unsqueeze(-1),
