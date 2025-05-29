@@ -323,7 +323,7 @@ def trained_energy_dipole_fixture(tmp_path_factory, fitting_configs):
         "energy_weight": 1.0,
         "forces_weight": 10.0,
         "stress_weight": 1.0,
-        "model": "EnergyDipolesMACE",
+        "model": "EnergyDipoleMACE",
         "num_channels": 32,
         "max_L": 1,
         "r_max": 3.5,

@@ -246,14 +246,14 @@ def _build_model(
             ],
             MLP_irreps=o3.Irreps(args.MLP_irreps),
         )
-    if args.model == "EnergyDipolesMACE":
+    if args.model == "EnergyDipoleMACE":
         assert (
             args.loss == "energy_forces_dipole"
-        ), "Use energy_forces_dipole loss with EnergyDipolesMACE model"
+        ), "Use energy_forces_dipole loss with EnergyDipoleMACE model"
         assert (
             args.error_table == "EnergyDipoleRMSE"
         ), "Use error_table EnergyDipoleRMSE with AtomicDipolesMACE model"
-        return modules.EnergyDipolesMACE(
+        return modules.EnergyDipoleMACE(
             **model_config,
             correlation=args.correlation,
             gate=modules.gate_dict[args.gate],

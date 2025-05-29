@@ -692,7 +692,7 @@ class AtomicDipolesMACE(torch.nn.Module):
 
 
 @compile_mode("script")
-class EnergyDipolesMACE(torch.nn.Module):
+class EnergyDipoleMACE(torch.nn.Module):
     def __init__(
         self,
         r_max: float,
