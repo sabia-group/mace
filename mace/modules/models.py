@@ -666,9 +666,7 @@ class AtomicDipolesMACE(torch.nn.Module):
             dipoles.append(node_dipoles)
 
         # Compute the dipoles
-        dipoles = torch.stack(
-            dipoles, dim=-1
-        )  # [n_nodes,3,n_contributions]
+        dipoles = torch.stack(dipoles, dim=-1)  # [n_nodes,3,n_contributions]
         atomic_dipoles = torch.sum(dipoles, dim=-1)  # [n_nodes,3]
         # delta_dipole = scatter_sum(
         #     src=atomic_dipoles,
@@ -684,7 +682,7 @@ class AtomicDipolesMACE(torch.nn.Module):
         # )  # [n_graphs,3]
         # total_dipole = delta_dipole + baseline
 
-        dipole_outputs = get_dipole_outputs(atomic_dipoles,data)
+        dipole_outputs = get_dipole_outputs(atomic_dipoles, data)
         return dipole_outputs
 
 
@@ -901,9 +899,7 @@ class EnergyDipoleMACE(torch.nn.Module):
         total_energy = torch.sum(contributions, dim=-1)  # [n_graphs, ]
         node_energy_contributions = torch.stack(node_energies_list, dim=-1)
         node_energy = torch.sum(node_energy_contributions, dim=-1)  # [n_nodes, ]
-        dipoles = torch.stack(
-            dipoles, dim=-1
-        )  # [n_nodes,3,n_contributions]
+        dipoles = torch.stack(dipoles, dim=-1)  # [n_nodes,3,n_contributions]
         atomic_dipoles = torch.sum(dipoles, dim=-1)  # [n_nodes,3]
         # delta_dipole = scatter_sum(
         #     src=atomic_dipoles,
@@ -939,11 +935,12 @@ class EnergyDipoleMACE(torch.nn.Module):
             "stress": stress,
             "displacement": displacement,
         }
-        
-        dipole_outputs = get_dipole_outputs(atomic_dipoles,data)
-        return {**output,**dipole_outputs}
 
-def get_dipole_outputs(atomic_dipoles,data,*argv,**kwargs):
+        dipole_outputs = get_dipole_outputs(atomic_dipoles, data)
+        return {**output, **dipole_outputs}
+
+
+def get_dipole_outputs(atomic_dipoles, data, *argv, **kwargs):
     """
     Computes the dipole outputs for the MACE model.
     Args:
@@ -969,8 +966,8 @@ def get_dipole_outputs(atomic_dipoles,data,*argv,**kwargs):
     )  # [n_graphs,3]
     total_dipole = delta_dipole + baseline
     return {
-        "dipole": total_dipole,                           # system, multi-valued
-        "atomic_dipoles": atomic_dipoles+baseline_atomic, # atomic, multi-valued
-        "baseline-atomic_dipoles": baseline_atomic,       # atomic, multi-valued
+        "dipole": total_dipole,  # system, multi-valued
+        "atomic_dipoles": atomic_dipoles + baseline_atomic,  # atomic, multi-valued
+        "baseline-atomic_dipoles": baseline_atomic,  # atomic, multi-valued
         # "baseline-atomic_dipoles" - "atomic_dipoles" returns "atomic_dipoles", which is atomic, single-valued
     }
