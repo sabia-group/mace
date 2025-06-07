@@ -666,29 +666,26 @@ class AtomicDipolesMACE(torch.nn.Module):
             dipoles.append(node_dipoles)
 
         # Compute the dipoles
-        contributions_dipoles = torch.stack(
+        dipoles = torch.stack(
             dipoles, dim=-1
         )  # [n_nodes,3,n_contributions]
-        atomic_dipoles = torch.sum(contributions_dipoles, dim=-1)  # [n_nodes,3]
-        total_dipole = scatter_sum(
-            src=atomic_dipoles,
-            index=data["batch"],
-            dim=0,
-            dim_size=num_graphs,
-        )  # [n_graphs,3]
-        baseline = compute_fixed_charge_dipole(
-            charges=data["charges"],
-            positions=data["positions"],
-            batch=data["batch"],
-            num_graphs=num_graphs,
-        )  # [n_graphs,3]
-        total_dipole = total_dipole + baseline
+        atomic_dipoles = torch.sum(dipoles, dim=-1)  # [n_nodes,3]
+        # delta_dipole = scatter_sum(
+        #     src=atomic_dipoles,
+        #     index=data["batch"],
+        #     dim=0,
+        #     dim_size=num_graphs,
+        # )  # [n_graphs,3]
+        # baseline, baseline_atomic = compute_fixed_charge_dipole(
+        #     charges=data["charges"],
+        #     positions=data["positions"],
+        #     batch=data["batch"],
+        #     num_graphs=num_graphs,
+        # )  # [n_graphs,3]
+        # total_dipole = delta_dipole + baseline
 
-        output = {
-            "dipole": total_dipole,
-            "atomic_dipoles": atomic_dipoles,
-        }
-        return output
+        dipole_outputs = get_dipole_outputs(atomic_dipoles,data)
+        return dipole_outputs
 
 
 @compile_mode("script")
@@ -904,23 +901,23 @@ class EnergyDipoleMACE(torch.nn.Module):
         total_energy = torch.sum(contributions, dim=-1)  # [n_graphs, ]
         node_energy_contributions = torch.stack(node_energies_list, dim=-1)
         node_energy = torch.sum(node_energy_contributions, dim=-1)  # [n_nodes, ]
-        contributions_dipoles = torch.stack(
+        dipoles = torch.stack(
             dipoles, dim=-1
         )  # [n_nodes,3,n_contributions]
-        atomic_dipoles = torch.sum(contributions_dipoles, dim=-1)  # [n_nodes,3]
-        total_dipole = scatter_sum(
-            src=atomic_dipoles,
-            index=data["batch"].unsqueeze(-1),
-            dim=0,
-            dim_size=num_graphs,
-        )  # [n_graphs,3]
-        baseline = compute_fixed_charge_dipole(
-            charges=data["charges"],
-            positions=data["positions"],
-            batch=data["batch"],
-            num_graphs=num_graphs,
-        )  # [n_graphs,3]
-        total_dipole = total_dipole + baseline
+        atomic_dipoles = torch.sum(dipoles, dim=-1)  # [n_nodes,3]
+        # delta_dipole = scatter_sum(
+        #     src=atomic_dipoles,
+        #     index=data["batch"].unsqueeze(-1),
+        #     dim=0,
+        #     dim_size=num_graphs,
+        # )  # [n_graphs,3]
+        # baseline, baseline_atomic = compute_fixed_charge_dipole(
+        #     charges=data["charges"],
+        #     positions=data["positions"],
+        #     batch=data["batch"],
+        #     num_graphs=num_graphs,
+        # )  # [n_graphs,3]
+        # total_dipole = delta_dipole + baseline
 
         forces, virials, stress, _, _ = get_outputs(
             energy=total_energy,
@@ -941,7 +938,39 @@ class EnergyDipoleMACE(torch.nn.Module):
             "virials": virials,
             "stress": stress,
             "displacement": displacement,
-            "dipole": total_dipole,
-            "atomic_dipoles": atomic_dipoles,
         }
-        return output
+        
+        dipole_outputs = get_dipole_outputs(atomic_dipoles,data)
+        return {**output,**dipole_outputs}
+
+def get_dipole_outputs(atomic_dipoles,data,*argv,**kwargs):
+    """
+    Computes the dipole outputs for the MACE model.
+    Args:
+        atomic_dipoles (torch.Tensor): Atomic dipoles of shape [n_nodes, 3].
+        data (Dict[str, torch.Tensor]): Input data containing batch information.
+        *argv: Additional arguments.
+        **kwargs: Additional keyword arguments.
+    Returns:
+        Dict[str, torch.Tensor]: Dictionary containing the dipole outputs.
+    """
+    num_graphs = data["ptr"].numel() - 1
+    delta_dipole = scatter_sum(
+        src=atomic_dipoles,
+        index=data["batch"].unsqueeze(-1),
+        dim=0,
+        dim_size=num_graphs,
+    )  # [n_graphs,3]
+    baseline, baseline_atomic = compute_fixed_charge_dipole(
+        charges=data["charges"],
+        positions=data["positions"],
+        batch=data["batch"],
+        num_graphs=num_graphs,
+    )  # [n_graphs,3]
+    total_dipole = delta_dipole + baseline
+    return {
+        "dipole": total_dipole,                           # system, multi-valued
+        "atomic_dipoles": atomic_dipoles+baseline_atomic, # atomic, multi-valued
+        "baseline-atomic_dipoles": baseline_atomic,       # atomic, multi-valued
+        # "baseline-atomic_dipoles" - "atomic_dipoles" returns "atomic_dipoles", which is atomic, single-valued
+    }

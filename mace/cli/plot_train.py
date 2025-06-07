@@ -156,7 +156,7 @@ def plot(
         "rmse_stress": "RMSE Stress [meV / A^3]",
         "rmse_virials_per_atom": " RMSE virials/atom [meV]",
         "mae_virials": "MAE Virials [meV]",
-        "rmse_mu_per_atom": "RMSE MU/atom [mDebye]",
+        "rmse_mu_per_atom": "RMSE MU/atom [e*ang]",
     }
 
     data = data[data["epoch"] > min_epoch]
