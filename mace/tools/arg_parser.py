@@ -126,7 +126,7 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
             "ScaleShiftMACE",
             "ScaleShiftBOTNet",
             "AtomicDipolesMACE",
-            "EnergyDipolesMACE",
+            "EnergyDipoleMACE",
         ],
     )
     parser.add_argument(

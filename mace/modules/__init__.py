@@ -30,7 +30,7 @@ from .loss import (
     WeightedForcesLoss,
     WeightedHuberEnergyForcesStressLoss,
 )
-from .models import MACE, AtomicDipolesMACE, EnergyDipolesMACE, ScaleShiftMACE
+from .models import MACE, AtomicDipolesMACE, EnergyDipoleMACE, ScaleShiftMACE
 from .radial import BesselBasis, GaussianBasis, PolynomialCutoff, ZBLBasis
 from .symmetric_contraction import SymmetricContraction
 from .utils import (
@@ -81,7 +81,7 @@ __all__ = [
     "MACE",
     "ScaleShiftMACE",
     "AtomicDipolesMACE",
-    "EnergyDipolesMACE",
+    "EnergyDipoleMACE",
     "WeightedEnergyForcesLoss",
     "WeightedForcesLoss",
     "WeightedEnergyForcesVirialsLoss",

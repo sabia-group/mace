@@ -186,7 +186,7 @@ def test_energy_dipole_mace():
         atomic_numbers=table.zs,
         correlation=3,
     )
-    model = modules.EnergyDipolesMACE(**model_config)
+    model = modules.EnergyDipoleMACE(**model_config)
 
     atomic_data = data.AtomicData.from_config(config, z_table=table, cutoff=3.0)
     atomic_data2 = data.AtomicData.from_config(

@@ -472,7 +472,7 @@ def run(args) -> None:
         args.compute_stress = False
     else:
         dipole_only = False
-        if args.model == "EnergyDipolesMACE":
+        if args.model == "EnergyDipoleMACE":
             args.compute_dipole = True
             args.compute_energy = True
             args.compute_forces = True
