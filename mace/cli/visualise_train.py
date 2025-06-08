@@ -90,6 +90,20 @@ error_type = {
             ("dipole", "Dipole per atom [e*ang]"),
         ],
     ),
+    "StressDipoleRMSE": (
+        [
+            ("rmse_e_per_atom", "RMSE E/atom [meV]"),
+            ("rmse_f", "RMSE F [meV / A]"),
+            ("rmse_stress", "RMSE Stress [meV / A^3]"),
+            ("rmse_mu_per_atom", "RMSE MU/atom [me*ang]"),
+        ],
+        [
+            ("energy", "Energy per atom [eV]"),
+            ("force", "Force [eV / A]"),
+            ("stress", "Stress [eV / A^3]"),
+            ("dipole", "Dipole per atom [e*ang]"),
+        ],
+    ),
 }
 
 
