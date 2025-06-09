@@ -95,9 +95,9 @@ def configure_model(
         if args.model == "MACE" and model_foundation.__class__.__name__ == "MACE":
             model_config_foundation["atomic_inter_shift"] = [0.0] * len(heads)
         else:
-            model_config_foundation["atomic_inter_shift"] = (
-                _determine_atomic_inter_shift(args.mean, heads)
-            )
+            model_config_foundation[
+                "atomic_inter_shift"
+            ] = _determine_atomic_inter_shift(args.mean, heads)
         model_config_foundation["atomic_inter_scale"] = [1.0] * len(heads)
         args.avg_num_neighbors = model_config_foundation["avg_num_neighbors"]
         args.model = "FoundationMACE"
@@ -254,7 +254,7 @@ def _build_model(
         assert args.error_table in [
             "EnergyDipoleRMSE",
             "StressDipoleRMSE",
-        ], "Use error_table EnergyDipoleRMSE or withStressDipoleRMSE  EnergyDipoleMACE model"
+        ], f"Use error_table EnergyDipoleRMSE or StressDipoleRMSE  with EnergyDipoleMACE model (provided error table is {args.error_table })"
         return modules.EnergyDipoleMACE(
             **model_config,
             correlation=args.correlation,
