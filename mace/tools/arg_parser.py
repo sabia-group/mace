@@ -778,6 +778,12 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
             "forces_weight",
         ],
     )
+    parser.add_argument(
+        "--use_pme",
+        help="wheter to use torch-pme",
+        type=str2bool,
+        default=False,
+    )
     return parser
 
 
