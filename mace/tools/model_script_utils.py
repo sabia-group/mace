@@ -22,13 +22,17 @@ def configure_model(
     # Selecting outputs
     compute_virials = args.loss == "virials"
     compute_stress = args.loss in ("stress", "huber", "universal", "stress+dipole")
-
-    if compute_virials:
-        args.compute_virials = True
-        args.error_table = "PerAtomRMSEstressvirials"
-    elif compute_stress:
-        args.compute_stress = True
-        args.error_table = "PerAtomRMSEstressvirials"
+    
+    if args.error_table == "StressDipoleRMSE":
+        assert not compute_virials, f"virials are not supported with error table {args.error_table}"
+        assert compute_stress, f"compute_stress must be true with error table {args.error_table}"
+    else:
+        if compute_virials:
+            args.compute_virials = True
+            args.error_table = "PerAtomRMSEstressvirials"
+        elif compute_stress:
+            args.compute_stress = True
+            args.error_table = "PerAtomRMSEstressvirials"
 
     output_args = {
         "energy": args.compute_energy,
@@ -95,9 +99,9 @@ def configure_model(
         if args.model == "MACE" and model_foundation.__class__.__name__ == "MACE":
             model_config_foundation["atomic_inter_shift"] = [0.0] * len(heads)
         else:
-            model_config_foundation["atomic_inter_shift"] = (
-                _determine_atomic_inter_shift(args.mean, heads)
-            )
+            model_config_foundation[
+                "atomic_inter_shift"
+            ] = _determine_atomic_inter_shift(args.mean, heads)
         model_config_foundation["atomic_inter_scale"] = [1.0] * len(heads)
         args.avg_num_neighbors = model_config_foundation["avg_num_neighbors"]
         args.model = "FoundationMACE"
@@ -254,7 +258,7 @@ def _build_model(
         assert args.error_table in [
             "EnergyDipoleRMSE",
             "StressDipoleRMSE",
-        ], "Use error_table EnergyDipoleRMSE or StressDipoleRMSE with EnergyDipoleMACE model"
+        ], f"Use error_table EnergyDipoleRMSE or StressDipoleRMSE  with EnergyDipoleMACE model (provided error table is {args.error_table })"
         return modules.EnergyDipoleMACE(
             **model_config,
             correlation=args.correlation,
