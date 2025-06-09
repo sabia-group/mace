@@ -22,13 +22,17 @@ def configure_model(
     # Selecting outputs
     compute_virials = args.loss == "virials"
     compute_stress = args.loss in ("stress", "huber", "universal", "stress+dipole")
-
-    if compute_virials:
-        args.compute_virials = True
-        args.error_table = "PerAtomRMSEstressvirials"
-    elif compute_stress:
-        args.compute_stress = True
-        args.error_table = "PerAtomRMSEstressvirials"
+    
+    if args.error_table == "StressDipoleRMSE":
+        assert not compute_virials, f"virials are not supported with error table {args.error_table}"
+        assert compute_stress, f"compute_stress must be true with error table {args.error_table}"
+    else:
+        if compute_virials:
+            args.compute_virials = True
+            args.error_table = "PerAtomRMSEstressvirials"
+        elif compute_stress:
+            args.compute_stress = True
+            args.error_table = "PerAtomRMSEstressvirials"
 
     output_args = {
         "energy": args.compute_energy,
