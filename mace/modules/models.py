@@ -706,7 +706,10 @@ class EnergyDipoleMACE(torch.nn.Module):
         gate: Optional[Callable],
         atomic_energies: Optional[np.ndarray],
         radial_MLP: Optional[List[int]] = None,
-        cueq_config: Optional[Dict[str, Any]] = None,  # pylint: disable=unused-argument
+        cueq_config: Optional[
+            Dict[str, Any]
+        ] = None,  # pylint: disable=unused-argument,
+        use_pme: Optional[bool] = False,
     ):
         super().__init__()
         self.register_buffer(
@@ -809,6 +812,18 @@ class EnergyDipoleMACE(torch.nn.Module):
                 self.readouts.append(
                     LinearDipoleReadoutBlock(hidden_irreps, dipole_only=False)
                 )
+
+        self.pme = use_pme
+        self.register_buffer("pme_cutoff", torch.tensor(r_max * 0.8))
+        if self.pme:
+            from torchpme import CoulombPotential, EwaldCalculator
+
+            self.pme_potential = CoulombPotential()
+            self.ewald_calc = EwaldCalculator()
+        else:
+
+            self.pme_potential = None
+            self.ewald_calc = None
 
     def forward(
         self,
@@ -925,6 +940,41 @@ class EnergyDipoleMACE(torch.nn.Module):
             compute_virials=compute_virials,
             compute_stress=compute_stress,
         )
+
+        # ----------------------------------------------- #
+        # === Coulomb energy with PME ===
+        if self.pme:
+
+            assert (
+                self.ewald_calc is not None
+            ), "Coding error: self.ewald_calc should not be None"
+
+            charges = data["charges"].unsqueeze(-1)
+
+            # Compute per-atom Coulomb potential
+            coulomb_potentials = self.ewald_calc(
+                charges=charges,  # [n_nodes, 1],
+                cell=data["cell"],  # [n_graphs, 3, 3]
+                positions=data["positions"],  # [n_nodes, 3]
+                neighbor_indices=data["edge_index"],
+                neighbor_distances=lengths,
+            )
+
+            # Get total Coulomb energy per graph
+            e_coul_atomwise = charges.squeeze(-1) * coulomb_potentials.squeeze(
+                -1
+            )  # [n_atoms]
+            e_coul = scatter_sum(
+                src=e_coul_atomwise,
+                index=data["batch"],
+                dim=-1,
+                dim_size=num_graphs,
+            )  # [n_graphs,]
+
+            # Add to total energy
+            total_energy = total_energy + e_coul
+
+        # ----------------------------------------------- #
 
         output = {
             "energy": total_energy,

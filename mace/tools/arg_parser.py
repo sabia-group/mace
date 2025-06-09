@@ -949,6 +949,12 @@ def build_preprocess_arg_parser() -> argparse.ArgumentParser:
         default=None,
         required=False,
     )
+    parser.add_argument(
+        "--use_pme",
+        help="wheter to use torch-pme",
+        type=str2bool,
+        default=False,
+    )
     return parser
 
 

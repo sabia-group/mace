@@ -254,7 +254,7 @@ def _build_model(
         assert args.error_table in [
             "EnergyDipoleRMSE",
             "StressDipoleRMSE",
-        ], "Use error_table EnergyDipoleRMSE or withStressDipoleRMSE  EnergyDipoleMACE model"
+        ], "Use error_table EnergyDipoleRMSE or StressDipoleRMSE with EnergyDipoleMACE model"
         return modules.EnergyDipoleMACE(
             **model_config,
             correlation=args.correlation,
@@ -263,5 +263,6 @@ def _build_model(
                 "RealAgnosticInteractionBlock"
             ],
             MLP_irreps=o3.Irreps(args.MLP_irreps),
+            use_pme=args.use_pme,
         )
     raise RuntimeError(f"Unknown model: '{args.model}'")
