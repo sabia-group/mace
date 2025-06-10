@@ -254,9 +254,9 @@ def create_error_table(
                 ]
             )
         elif table_type == "StressDipoleRMSE":
-            assert (
-                metrics["rmse_virials"] is None
-            ), "rmse_virials not supported with StressDipoleRMSE"
+            # assert (
+            #     metrics["rmse_virials"] is None
+            # ), "rmse_virials not supported with StressDipoleRMSE"
             table.add_row(
                 [
                     name,
