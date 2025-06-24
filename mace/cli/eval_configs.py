@@ -110,33 +110,51 @@ def run(args: argparse.Namespace) -> None:
     )
 
     # Collect data
-    energies_list = []
     contributions_list = []
     stresses_list = []
-    forces_collection = []
+    arrays = {}
+    infos = {}
 
     for batch in data_loader:
         batch = batch.to(device)
         output = model(batch.to_dict(), compute_stress=args.compute_stress)
-        energies_list.append(torch_tools.to_numpy(output["energy"]))
+
         if args.compute_stress:
             stresses_list.append(torch_tools.to_numpy(output["stress"]))
 
         if args.return_contributions:
             contributions_list.append(torch_tools.to_numpy(output["contributions"]))
 
-        forces = np.split(
-            torch_tools.to_numpy(output["forces"]),
-            indices_or_sections=batch.ptr[1:],
-            axis=0,
-        )
-        forces_collection.append(forces[:-1])  # drop last as its empty
+        # global properties
+        for k in ["energy", "dipole"]:
+            if k not in infos:
+                infos[k] = list()
+            infos[k].append(torch_tools.to_numpy(output[k]))
 
-    energies = np.concatenate(energies_list, axis=0)
-    forces_list = [
-        forces for forces_list in forces_collection for forces in forces_list
-    ]
-    assert len(atoms_list) == len(energies) == len(forces_list)
+        # atomic properties
+        for k in ["forces", "atomic_dipoles", "baseline-atomic_dipoles"]:
+
+            if k in output:
+                tmp = np.split(
+                    torch_tools.to_numpy(output[k]),
+                    indices_or_sections=batch.ptr[1:],
+                    axis=0,
+                )
+                if k not in arrays:
+                    arrays[k] = list()
+
+                arrays[k].append(tmp[:-1])  # drop last as its empty
+
+    info_list = {}
+    for k, v in infos.items():
+        info_list[k] = np.concatenate(v, axis=0)
+        assert len(atoms_list) == len(info_list[k])
+
+    array_list = {}
+    for k, v in arrays.items():
+        array_list[k] = [forces for forces_list in v for forces in forces_list]
+        assert len(atoms_list) == len(array_list[k])
+
     if args.compute_stress:
         stresses = np.concatenate(stresses_list, axis=0)
         assert len(atoms_list) == stresses.shape[0]
@@ -146,10 +164,16 @@ def run(args: argparse.Namespace) -> None:
         assert len(atoms_list) == contributions.shape[0]
 
     # Store data in atoms objects
-    for i, (atoms, energy, forces) in enumerate(zip(atoms_list, energies, forces_list)):
+    for i, atoms in enumerate(atoms_list):
         atoms.calc = None  # crucial
-        atoms.info[args.info_prefix + "energy"] = energy
-        atoms.arrays[args.info_prefix + "forces"] = forces
+
+        # global properties
+        for k in info_list.keys():
+            atoms.info[args.info_prefix + k] = info_list[k][i]
+
+        # atomic properties
+        for k in array_list.keys():
+            atoms.arrays[args.info_prefix + k] = array_list[k][i]
 
         if args.compute_stress:
             atoms.info[args.info_prefix + "stress"] = stresses[i]
