@@ -477,16 +477,16 @@ def compute_rms_dipoles(
     return rms
 
 
+@torch.jit.script
 def compute_fixed_charge_dipole(
     charges: torch.Tensor,
     positions: torch.Tensor,
     batch: torch.Tensor,
     num_graphs: int,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    # mu has the unit of e*angstrom
     mu = positions * charges.unsqueeze(-1)  # [N_atoms,3]
     return (
-        scatter_sum(src=mu, index=batch.unsqueeze(-1), dim=0, dim_size=num_graphs),
+        scatter_sum(mu, batch.unsqueeze(-1), dim=0, dim_size=num_graphs),
         mu,
     )  # [N_graphs,3]
 
