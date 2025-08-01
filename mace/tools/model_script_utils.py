@@ -5,6 +5,7 @@ import numpy as np
 from e3nn import o3
 
 from mace import modules
+from mace.modules.wrapper_ops import CuEquivarianceConfig
 from mace.tools.finetuning_utils import load_foundations_elements
 from mace.tools.scripts_utils import extract_config_mace_model
 from mace.tools.utils import AtomicNumberTable
@@ -72,7 +73,10 @@ def configure_model(
         args.mean, args.std = modules.scaling_classes[args.scaling](
             train_loader, atomic_energies
         )
-
+    if args.embedding_specs is not None:
+        args.embedding_specs = ast.literal_eval(args.embedding_specs)
+        logging.info("Using embedding specifications from command line arguments")
+        logging.info(f"Embedding specifications: {args.embedding_specs}")
     # Build model
     if model_foundation is not None and args.model in ["MACE", "ScaleShiftMACE"]:
         logging.info("Loading FOUNDATION model")
@@ -109,7 +113,7 @@ def configure_model(
         model_config = model_config_foundation
 
         logging.info("Model configuration extracted from foundation model")
-        logging.info("Using universal loss function for fine-tuning")
+        logging.info(f"Using {args.loss} loss function for fine-tuning")
         logging.info(
             f"Message passing with hidden irreps {model_config_foundation['hidden_irreps']})"
         )
@@ -146,6 +150,17 @@ def configure_model(
 
         logging.info(f"Hidden irreps: {args.hidden_irreps}")
 
+        cueq_config = None
+        if args.only_cueq:
+            logging.info("Using only the backend of the model")
+            cueq_config = CuEquivarianceConfig(
+                enabled=True,
+                layout="ir_mul",
+                group="O3_e3nn",
+                optimize_all=True,
+                conv_fusion=(args.device == "cuda"),
+            )
+
         model_config = dict(
             r_max=args.r_max,
             num_bessel=args.num_radial_basis,
@@ -155,9 +170,14 @@ def configure_model(
             num_interactions=args.num_interactions,
             num_elements=len(z_table),
             hidden_irreps=o3.Irreps(args.hidden_irreps),
+            edge_irreps=o3.Irreps(args.edge_irreps) if args.edge_irreps else None,
             atomic_energies=atomic_energies,
+            apply_cutoff=args.apply_cutoff,
             avg_num_neighbors=args.avg_num_neighbors,
             atomic_numbers=z_table.zs,
+            use_reduced_cg=args.use_reduced_cg,
+            use_so3=args.use_so3,
+            cueq_config=cueq_config,
         )
         model_config_foundation = None
 
@@ -213,6 +233,7 @@ def _build_model(
             radial_MLP=ast.literal_eval(args.radial_MLP),
             radial_type=args.radial_type,
             heads=heads,
+            embedding_specs=args.embedding_specs,
         )
     if args.model == "ScaleShiftMACE":
         return modules.ScaleShiftMACE(
@@ -228,6 +249,7 @@ def _build_model(
             radial_MLP=ast.literal_eval(args.radial_MLP),
             radial_type=args.radial_type,
             heads=heads,
+            embedding_specs=args.embedding_specs,
         )
     if args.model == "FoundationMACE":
         return modules.ScaleShiftMACE(**model_config_foundation)
