@@ -1106,7 +1106,6 @@ class EnergyDipoleMACE(torch.nn.Module):
         return {**output, **dipole_outputs}
 
 
-@torch.jit.script
 def get_dipole_outputs(
     atomic_dipoles: torch.Tensor, data: Batch
 ) -> Dict[str, torch.Tensor]:
