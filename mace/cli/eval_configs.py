@@ -88,7 +88,10 @@ def run(args: argparse.Namespace) -> None:
     if args.head is not None:
         for atoms in atoms_list:
             atoms.info["head"] = args.head
-    configs = [data.config_from_atoms(atoms) for atoms in atoms_list]
+    keyspec = data.KeySpecification(info_keys={}, arrays_keys={"charges": "Qs"})
+    configs = [
+        data.config_from_atoms(atoms, key_specification=keyspec) for atoms in atoms_list
+    ]
 
     z_table = utils.AtomicNumberTable([int(z) for z in model.atomic_numbers])
 
@@ -133,7 +136,6 @@ def run(args: argparse.Namespace) -> None:
 
         # atomic properties
         for k in ["forces", "atomic_dipoles", "baseline-atomic_dipoles"]:
-
             if k in output:
                 tmp = np.split(
                     torch_tools.to_numpy(output[k]),
