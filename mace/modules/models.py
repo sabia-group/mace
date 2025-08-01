@@ -14,6 +14,7 @@ from e3nn.util.jit import compile_mode
 from mace.modules.embeddings import GenericJointEmbedding
 from mace.modules.radial import ZBLBasis
 from mace.tools.scatter import scatter_sum
+from mace.tools.torch_geometric.batch import Batch
 
 from .blocks import (
     AtomicEnergiesBlock,
@@ -1104,10 +1105,10 @@ class EnergyDipoleMACE(torch.nn.Module):
         dipole_outputs = get_dipole_outputs(atomic_dipoles, data)
         return {**output, **dipole_outputs}
 
+
 @torch.jit.script
 def get_dipole_outputs(
-    atomic_dipoles: torch.Tensor,
-    data: Dict[str, torch.Tensor]
+    atomic_dipoles: torch.Tensor, data: Batch
 ) -> Dict[str, torch.Tensor]:
     """
     Computes the dipole outputs for the MACE model.
@@ -1148,4 +1149,3 @@ def get_dipole_outputs(
         "atomic_dipoles": atomic_dipoles + baseline_atomic,
         "baseline-atomic_dipoles": baseline_atomic,
     }
-
