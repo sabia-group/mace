@@ -1104,35 +1104,48 @@ class EnergyDipoleMACE(torch.nn.Module):
         dipole_outputs = get_dipole_outputs(atomic_dipoles, data)
         return {**output, **dipole_outputs}
 
-
-def get_dipole_outputs(atomic_dipoles, data, *argv, **kwargs):
+@torch.jit.script
+def get_dipole_outputs(
+    atomic_dipoles: torch.Tensor,
+    data: Dict[str, torch.Tensor]
+) -> Dict[str, torch.Tensor]:
     """
     Computes the dipole outputs for the MACE model.
+
     Args:
-        atomic_dipoles (torch.Tensor): Atomic dipoles of shape [n_nodes, 3].
-        data (Dict[str, torch.Tensor]): Input data containing batch information.
-        *argv: Additional arguments.
-        **kwargs: Additional keyword arguments.
+        atomic_dipoles (Tensor): Atomic dipoles of shape [n_nodes, 3].
+        data (Dict[str, Tensor]): Dictionary with keys:
+            - "ptr": (Tensor)
+            - "batch": (Tensor)
+            - "charges": (Tensor)
+            - "positions": (Tensor)
+
     Returns:
-        Dict[str, torch.Tensor]: Dictionary containing the dipole outputs.
+        Dict[str, Tensor]: Contains:
+            - "dipole": [n_graphs, 3]
+            - "atomic_dipoles": [n_nodes, 3]
+            - "baseline-atomic_dipoles": [n_nodes, 3]
     """
     num_graphs = data["ptr"].numel() - 1
     delta_dipole = scatter_sum(
-        src=atomic_dipoles,
-        index=data["batch"].unsqueeze(-1),
+        atomic_dipoles,
+        data["batch"].unsqueeze(-1),
         dim=0,
         dim_size=num_graphs,
-    )  # [n_graphs,3]
+    )  # [n_graphs, 3]
+
     baseline, baseline_atomic = compute_fixed_charge_dipole(
         charges=data["charges"],
         positions=data["positions"],
         batch=data["batch"],
         num_graphs=num_graphs,
-    )  # [n_graphs,3]
+    )  # [n_graphs,3], [n_nodes,3]
+
     total_dipole = delta_dipole + baseline
+
     return {
-        "dipole": total_dipole,  # system, multi-valued
-        "atomic_dipoles": atomic_dipoles + baseline_atomic,  # atomic, multi-valued
-        "baseline-atomic_dipoles": baseline_atomic,  # atomic, multi-valued
-        # "baseline-atomic_dipoles" - "atomic_dipoles" returns "atomic_dipoles", which is atomic, single-valued
+        "dipole": total_dipole,
+        "atomic_dipoles": atomic_dipoles + baseline_atomic,
+        "baseline-atomic_dipoles": baseline_atomic,
     }
+
