@@ -4,6 +4,7 @@
 # This program is distributed under the MIT License (see MIT.md)
 ###########################################################################################
 
+import traceback
 import ast
 import glob
 import json
@@ -915,7 +916,8 @@ def run(args) -> None:
                         _extra_files=extra_files,
                     )
                 except Exception as e:  # pylint: disable=W0718
-                    pass
+                    logging.error(f"Model compilation failed: {e}")
+                    traceback.print_exc()
             else:
                 torch.save(model_to_save, Path(args.model_dir) / (args.name + ".model"))
                 try:
