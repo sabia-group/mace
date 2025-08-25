@@ -1103,7 +1103,8 @@ class EnergyDipoleMACE(torch.nn.Module):
         }
 
         dipole_outputs = get_dipole_outputs(atomic_dipoles, data)
-        return {**output, **dipole_outputs}
+        output.update(dipole_outputs)
+        return output
 
 
 def get_dipole_outputs(
