@@ -4,7 +4,7 @@
 # This program is distributed under the MIT License (see MIT.md)
 ###########################################################################################
 
-from typing import Any, Callable, Dict, List, Optional, Type, Union
+from typing import Any, Callable, Dict, List, Optional, Type, Union, Tuple
 
 import numpy as np
 import torch
@@ -825,8 +825,14 @@ class AtomicDipolesMACE(torch.nn.Module):
         # )  # [n_graphs,3]
         # total_dipole = delta_dipole + baseline
 
-        dipole_outputs = get_dipole_outputs(atomic_dipoles, data)
-        return dipole_outputs
+        total_dipole, atomic_dipoles, baseline_atomic = get_dipole_outputs(
+            atomic_dipoles, data
+        )
+        return {
+            "dipole": total_dipole,
+            "atomic_dipoles": atomic_dipoles,
+            "baseline-atomic_dipoles": baseline_atomic,
+        }
 
 
 @compile_mode("script")
@@ -1092,7 +1098,10 @@ class EnergyDipoleMACE(torch.nn.Module):
             compute_stress=compute_stress,
         )
 
-        output = {
+        total_dipole, atomic_dipoles, baseline_atomic = get_dipole_outputs(
+            atomic_dipoles, data
+        )
+        return {
             "energy": total_energy,
             "node_energy": node_energy,
             "contributions": contributions,
@@ -1100,16 +1109,15 @@ class EnergyDipoleMACE(torch.nn.Module):
             "virials": virials,
             "stress": stress,
             "displacement": displacement,
+            "dipole": total_dipole,
+            "atomic_dipoles": atomic_dipoles,
+            "baseline-atomic_dipoles": baseline_atomic,
         }
-
-        dipole_outputs = get_dipole_outputs(atomic_dipoles, data)
-        output.update(dipole_outputs)
-        return output
 
 
 def get_dipole_outputs(
     atomic_dipoles: torch.Tensor, data: Batch
-) -> Dict[str, torch.Tensor]:
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Computes the dipole outputs for the MACE model.
 
@@ -1143,9 +1151,12 @@ def get_dipole_outputs(
     )  # [n_graphs,3], [n_nodes,3]
 
     total_dipole = delta_dipole + baseline
+    atomic_dipoles = atomic_dipoles + baseline_atomic
 
-    return {
-        "dipole": total_dipole,
-        "atomic_dipoles": atomic_dipoles + baseline_atomic,
-        "baseline-atomic_dipoles": baseline_atomic,
-    }
+    return total_dipole, atomic_dipoles, baseline_atomic
+
+    # return {
+    #     "dipole": total_dipole,
+    #     "atomic_dipoles": atomic_dipoles + baseline_atomic,
+    #     "baseline-atomic_dipoles": baseline_atomic,
+    # }
