@@ -826,7 +826,11 @@ class AtomicDipolesMACE(torch.nn.Module):
         # total_dipole = delta_dipole + baseline
 
         total_dipole, atomic_dipoles, baseline_atomic = get_dipole_outputs(
-            atomic_dipoles, data
+            atomic_dipoles,
+            data["ptr"],
+            data["batch"],
+            data["charges"],
+            data["positions"],
         )
         return {
             "dipole": total_dipole,
@@ -1099,7 +1103,11 @@ class EnergyDipoleMACE(torch.nn.Module):
         )
 
         total_dipole, atomic_dipoles, baseline_atomic = get_dipole_outputs(
-            atomic_dipoles, data
+            atomic_dipoles,
+            data["ptr"],
+            data["batch"],
+            data["charges"],
+            data["positions"],
         )
         return {
             "energy": total_energy,
@@ -1116,7 +1124,12 @@ class EnergyDipoleMACE(torch.nn.Module):
 
 
 def get_dipole_outputs(
-    atomic_dipoles: torch.Tensor, data: Batch
+    atomic_dipoles: torch.Tensor,
+    ptr: torch.Tensor,
+    batch: torch.Tensor,
+    charges: torch.Tensor,
+    positions: torch.Tensor,
+    # data: Batch
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Computes the dipole outputs for the MACE model.
@@ -1135,18 +1148,18 @@ def get_dipole_outputs(
             - "atomic_dipoles": [n_nodes, 3]
             - "baseline-atomic_dipoles": [n_nodes, 3]
     """
-    num_graphs = data["ptr"].numel() - 1
+    num_graphs = ptr.numel() - 1
     delta_dipole = scatter_sum(
         atomic_dipoles,
-        data["batch"].unsqueeze(-1),
+        batch.unsqueeze(-1),
         dim=0,
         dim_size=num_graphs,
     )  # [n_graphs, 3]
 
     baseline, baseline_atomic = compute_fixed_charge_dipole(
-        charges=data["charges"],
-        positions=data["positions"],
-        batch=data["batch"],
+        charges=charges,
+        positions=positions,
+        batch=batch,
         num_graphs=num_graphs,
     )  # [n_graphs,3], [n_nodes,3]
 
