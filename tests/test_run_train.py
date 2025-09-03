@@ -47,11 +47,10 @@ def fixture_fitting_configs():
         c.info["REF_energy"] = np.random.normal(0.1)
         print(c.info["REF_energy"])
         c.new_array("REF_forces", np.random.normal(0.1, size=c.positions.shape))
-        c.info["REF_stress"] = np.random.normal(0.1, size=6)        
+        c.info["REF_stress"] = np.random.normal(0.1, size=6)
         fit_configs.append(c)
 
     return fit_configs
-
 
 
 @pytest.fixture(name="pretraining_configs")
@@ -79,6 +78,7 @@ def fixture_pretraining_configs():
     configs[-1].info["REF_energy"] = -4.0
     configs[-1].info["config_type"] = "IsolatedAtom"
     return configs
+
 
 _mace_params = {
     "name": "MACE",
