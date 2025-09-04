@@ -272,6 +272,17 @@ class MACELES(ScaleShiftMACE):
 
 @compile_mode("script")
 class MACEPME(ScaleShiftMACE):
+    """
+    MACE + Particle Mesh Ewald.
+
+    Class that adds a long-ranged Coulomb interaction based on Ewald summation to a short-ranged MACE model.
+    You need to install 'torch-pme' (https://github.com/lab-cosmo/torch-pme.git) and 'vesin' (pip install .[examples] in 'torch-pme').
+    In the input file, you need to specify 'pme_arguments' as a JSON formatted string or the file path to a JSON file.
+    'pme_arguments' must contain at least 'lr_wavelength'.
+    You can also run 'tune_pme.py' by providing your dataset as input to get optimized parameters.
+    Then provide in 'pme_arguments' the parameters computed by that script.
+    Please, use the same cutoff radius in 'tune_pme.py' and in the input file for training!
+    """
 
     def __init__(self, pme_arguments: Optional[Dict] = None, **kwargs):
         super().__init__(**kwargs)
@@ -287,6 +298,13 @@ class MACEPME(ScaleShiftMACE):
         except ImportError as exc:
             raise ImportError(
                 "Cannot import 'CoulombPotential'. Please install the 'torch-pme' library from https://github.com/lab-cosmo/torch-pme.git."
+            ) from exc
+
+        try:
+            import vesin.torch  # used in forward method
+        except ImportError as exc:
+            raise ImportError(
+                "Cannot import 'vesin.torch'. Please install it through 'pip install .[examples]' in 'torch-pme' library from https://github.com/lab-cosmo/torch-pme.git."
             ) from exc
 
         assert (
@@ -359,6 +377,10 @@ class MACEPME(ScaleShiftMACE):
         lammps_mliap: bool = False,
     ) -> Dict[str, Optional[torch.Tensor]]:
 
+        import vesin.torch
+
+        # ---------------------------- #
+        # short-ranged MACE models
         results = super().forward(
             data,
             training=training,
@@ -372,19 +394,26 @@ class MACEPME(ScaleShiftMACE):
             lammps_mliap=lammps_mliap,
         )
 
+        # ---------------------------- #
+        # long-ranged Coulomb potential
+
         # sanity check
         unique_batches = torch.unique(data["batch"])  # Get unique batch indices
         assert len(unique_batches) == len(
             results["energy"]
         ), "Batch size mismatch between data and computed results"
 
+        # ---------------------------- #
+        # loop over structures (batching is not supported yet in torch-pme)
         for i in unique_batches:
-            mask = data["batch"] == i  # Create a mask for the i-th configuration
-            # Calculate the potential energy for the i-th configuration
+
+            # Create a mask for the i-th configuration
+            mask = data["batch"] == i
 
             # number of atoms
             Natoms = int(sum(mask))
 
+            # structure properties
             charges = data["charges"][mask]
             cell = data["cell"][i * 3 : (i + 1) * 3, :]
             positions = data["positions"][mask, :]
@@ -402,11 +431,7 @@ class MACEPME(ScaleShiftMACE):
                 3,
             ), f"Error: 'positions' should have shape ({Natoms},3) but it has {positions.shape}"
 
-            # neighbor_indices = data['shifts']
-            # neighbor_distances = torch.dot(data['shifts'], cell)
-
-            import vesin.torch
-
+            # interatomic distances
             nl = vesin.torch.NeighborList(cutoff=self.r_max, full_list=False)
             neighbor_indices_vesin, neighbor_distances_vesin = nl.compute(
                 points=positions.to(dtype=torch.float64, device="cpu"),
@@ -418,26 +443,25 @@ class MACEPME(ScaleShiftMACE):
             # electrostatic potential
             pot = self.pme(
                 charges[:, None],  # [Natoms,Nchannels = 1]
-                cell,
-                positions,
-                neighbor_indices_vesin,
-                neighbor_distances_vesin,
-            )[
-                :, 0
-            ]  # [Natoms,Nchannels] --> [Natoms] since we have only once channel
+                cell,  # [3,3]
+                positions,  # [Natoma,3]
+                neighbor_indices_vesin,  # [??]
+                neighbor_distances_vesin,  # [??]
+            )
 
+            # [Natoms,Nchannels] --> [Natoms] since we have only once channel
+            pot = pot[:, 0]
+
+            # electrostatic (atomic) energy
             atomic_energies = pot * charges
+
+            # readout to atomic_energies
             atomic_energies = self.extra_readouts[0](atomic_energies[:, None])[:, 0]
+
+            # update node_energy
             results["node_energy"][mask] += atomic_energies
+
+            # compute total energy
             results["energy"][i] += torch.sum(atomic_energies)
 
         return results
-
-    # def forward(
-    #     self,
-    #     charges: torch.Tensor,
-    #     cell: torch.Tensor,
-    #     positions: torch.Tensor,
-    #     neighbor_indices: torch.Tensor,
-    #     neighbor_distances: torch.Tensor,
-    # ):
