@@ -140,6 +140,7 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
             "MACE",
             "ScaleShiftMACE",
             "MACELES",
+            "MACEPME",
             "ScaleShiftBOTNet",
             "AtomicDipolesMACE",
             "AtomicDielectricMACE",
@@ -949,6 +950,13 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
             "energy_weight",
             "forces_weight",
         ],
+    )
+    parser.add_argument(
+        "--pme_arguments",
+        help="String of dictionary containing the arguments for the PME module",
+        type=str,
+        default=None,
+        required=False,
     )
     return parser
 

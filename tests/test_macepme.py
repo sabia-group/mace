@@ -32,6 +32,7 @@ def fixture_fitting_configs():
         cell=[4] * 3,
         pbc=[True] * 3,
     )
+    water.arrays["Qs"] = np.array([-0.834, 0.417, 0.417])
     fit_configs = [
         Atoms(numbers=[8], positions=[[0, 0, 0]], cell=[6] * 3),
         Atoms(numbers=[1], positions=[[0, 0, 0]], cell=[6] * 3),
@@ -40,6 +41,8 @@ def fixture_fitting_configs():
     fit_configs[0].info["config_type"] = "IsolatedAtom"
     fit_configs[1].info["REF_energy"] = 0.0
     fit_configs[1].info["config_type"] = "IsolatedAtom"
+    fit_configs[0].arrays["Qs"] = np.array([0.0])
+    fit_configs[1].arrays["Qs"] = np.array([0.0])
 
     np.random.seed(5)
     for _ in range(20):
@@ -77,8 +80,10 @@ _mace_params = {
     "energy_key": "REF_energy",
     "forces_key": "REF_forces",
     "stress_key": "REF_stress",
+    "charges_key": "Qs",
     "eval_interval": 2,
     "use_reduced_cg": False,
+    "pme_arguments": '{"lr_wavelength": 0.5, "smearing":1.0 }',
 }
 
 
@@ -96,7 +101,7 @@ def test_run_train(tmp_path, fitting_configs):
 
     mace_run(args)
 
-    calc = MACECalculator(model_paths=tmp_path / "MACE.model", device="cpu")
+    calc = MACECalculator(model_paths=tmp_path / "MACEPME.model", device="cpu")
 
     Es = []
     for at in fitting_configs:
@@ -153,7 +158,7 @@ def test_run_train_with_mp(tmp_path, fitting_configs):
 
     mace_run(args)
 
-    calc = MACECalculator(model_paths=tmp_path / "MACE.model", device="cpu")
+    calc = MACECalculator(model_paths=tmp_path / "MACEPME.model", device="cpu")
 
     Es = []
     for at in fitting_configs:
@@ -191,9 +196,9 @@ def test_run_train_with_mp(tmp_path, fitting_configs):
 
 @pytest.mark.skipif(
     not (PME_AVAILABLE and CUET_AVAILABLE and CUDA_AVAILABLE),
-    reason="Testing MACELES cueq training requires LES, cuequivariance, and CUDA to be available",
+    reason="Testing MACEPES cueq training requires LES, cuequivariance, and CUDA to be available",
 )
-def test_run_train_maceles_cueq(tmp_path, fitting_configs):
+def test_run_train_macepes_cueq(tmp_path, fitting_configs):
     ase.io.write(tmp_path / "fit.xyz", fitting_configs)
     os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
     mace_params = _mace_params.copy()
@@ -212,7 +217,7 @@ def test_run_train_maceles_cueq(tmp_path, fitting_configs):
     # Run the training
     mace_run(args)
 
-    calc = MACECalculator(model_paths=tmp_path / "MACE.model", device="cpu")
+    calc = MACECalculator(model_paths=tmp_path / "MACEPME.model", device="cpu")
 
     Es = []
     for at in fitting_configs:
@@ -266,129 +271,36 @@ MODEL_CONFIG = dict(
     radial_type="bessel",
     atomic_inter_shift=0.0,
     atomic_inter_scale=1.0,
+    pme_arguments={
+        "lr_wavelength": 0.5,
+    },
 )
 
 
-@pytest.fixture(name="mace_model_path")
-def mace_model_path_fixture(tmp_path: Path) -> Path:
-    """Create and save a standard ScaleShiftMACE model."""
+# @pytest.fixture(name="mace_model_path")
+# def mace_model_path_fixture(tmp_path: Path) -> Path:
+#     """Create and save a standard ScaleShiftMACE model."""
+#     with default_dtype(torch.float32):
+#         model = ScaleShiftMACE(**MODEL_CONFIG)
+#         path = tmp_path / "MACEPME.model"
+#         torch.save(model, path)
+#     return path
+
+
+@pytest.mark.skipif(not PME_AVAILABLE, reason="LES library is not available")
+@pytest.fixture(name="macepme_model_path")
+def macepme_model_path_fixture(tmp_path: Path) -> Path:
+    """Create and save a MACEPME model."""
     with default_dtype(torch.float32):
-        model = ScaleShiftMACE(**MODEL_CONFIG)
-        path = tmp_path / "mace.model"
+        model = MACEPME(**MODEL_CONFIG)
+        path = tmp_path / "MACEPME.model"
         torch.save(model, path)
     return path
 
-
-@pytest.mark.skipif(not PME_AVAILABLE, reason="LES library is not available")
-@pytest.fixture(name="maceles_model_path")
-def maceles_model_path_fixture(tmp_path: Path) -> Path:
-    """Create and save a MACELES model."""
-    with default_dtype(torch.float32):
-        model = MACELES(**MODEL_CONFIG)
-        path = tmp_path / "maceles.model"
-        torch.save(model, path)
-    return path
-
-
-@pytest.mark.skipif(not PME_AVAILABLE, reason="LES library is not available")
-def test_run_eval_with_bec(tmp_path: Path, maceles_model_path: Path, fitting_configs):
-    """Tests running evaluation with BEC computation enabled."""
-    output_path = tmp_path / "output.xyz"
-    ase.io.write(tmp_path / "fit.xyz", fitting_configs)
-    args = argparse.Namespace(
-        model=str(maceles_model_path),
-        configs=str(tmp_path / "fit.xyz"),
-        output=str(output_path),
-        device="cpu",
-        default_dtype="float32",
-        batch_size=1,
-        compute_stress=False,
-        compute_bec=True,
-        enable_cueq=False,
-        return_contributions=False,
-        return_descriptors=False,
-        return_node_energies=False,
-        info_prefix="MACE_",
-        head=None,
-    )
-    mace_eval_configs_run(args)
-
-    assert output_path.exists()
-    output_atoms = ase.io.read(str(output_path), index=":")
-    assert len(output_atoms) == len(fitting_configs)
-
-    for at in output_atoms:
-        assert isinstance(at, Atoms)
-        assert "MACE_BEC" in at.arrays
-        assert "MACE_latent_charges" in at.arrays
-        assert at.arrays["MACE_BEC"].shape == (len(at), 9)
-        assert at.arrays["MACE_latent_charges"].shape == ((len(at),))
-
-
-def test_run_eval_fail_with_wrong_model(
-    tmp_path: Path, mace_model_path: Path, fitting_configs
-):
-    # Test script fails if BEC is requested with a non-MACELES model
-    ase.io.write(tmp_path / "fit.xyz", fitting_configs)
-    args = argparse.Namespace(
-        model=str(mace_model_path),
-        configs=str(tmp_path / "fit.xyz"),
-        output=str(tmp_path / "output.xyz"),
-        device="cpu",
-        default_dtype="float32",
-        batch_size=1,
-        compute_stress=False,
-        compute_bec=True,  # Request BEC with wrong model
-        enable_cueq=False,
-        return_contributions=False,
-        return_descriptors=False,
-        return_node_energies=False,
-        info_prefix="MACE_",
-        head=None,
-    )
-
-    with pytest.raises(
-        ValueError, match="BEC can only be computed with MACELES model."
-    ):
-        mace_eval_configs_run(args)
-
-
-@pytest.mark.skipif(not PME_AVAILABLE, reason="LES library is not available")
-def test_run_eval_no_bec(tmp_path: Path, maceles_model_path: Path, fitting_configs):
-    """Tests running evaluation without requesting BEC."""
-    output_path = tmp_path / "output.xyz"
-    ase.io.write(tmp_path / "fit.xyz", fitting_configs)
-    args = argparse.Namespace(
-        model=str(maceles_model_path),
-        configs=str(tmp_path / "fit.xyz"),
-        output=str(output_path),
-        device="cpu",
-        default_dtype="float32",
-        batch_size=1,
-        compute_stress=True,
-        compute_bec=False,  # BEC computation is off
-        enable_cueq=False,
-        return_contributions=False,
-        return_descriptors=False,
-        return_node_energies=False,
-        info_prefix="MACE_",
-        head=None,
-    )
-    mace_eval_configs_run(args)
-
-    # Check that the output file exists
-    assert output_path.exists()
-    output_atoms = ase.io.read(str(output_path), index=":")
-    assert len(output_atoms) == len(fitting_configs)
-    for at in output_atoms:
-        assert isinstance(at, Atoms)
-        # Ensure BEC and latent charges are not present
-        assert "MACE_BEC" not in at.arrays
-        assert "MACE_latent_charges" not in at.arrays
-        # Check that other expected arrays are present
-        assert "MACE_energy" in at.info
-        assert "MACE_stress" in at.info
-        assert "MACE_forces" in at.arrays
 
 if __name__ == "__main__":
-    pytest.main([__file__])
+    import pytest
+    import sys
+
+    # Run pytest with the Python debugger on failure
+    sys.exit(pytest.main([__file__, "--pdb"]))

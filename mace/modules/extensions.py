@@ -269,9 +269,10 @@ class MACELES(ScaleShiftMACE):
             "BEC": les_result["BEC"],
         }
 
+
 @compile_mode("script")
 class MACEPME(ScaleShiftMACE):
-    
+
     def __init__(self, pme_arguments: Optional[Dict] = None, **kwargs):
         super().__init__(**kwargs)
         try:
@@ -280,30 +281,70 @@ class MACEPME(ScaleShiftMACE):
             raise ImportError(
                 "Cannot import 'EwaldCalculator'. Please install the 'torch-pme' library from https://github.com/lab-cosmo/torch-pme.git."
             ) from exc
-            
+
         try:
             from torchpme import CoulombPotential
         except ImportError as exc:
             raise ImportError(
                 "Cannot import 'CoulombPotential'. Please install the 'torch-pme' library from https://github.com/lab-cosmo/torch-pme.git."
             ) from exc
-        
-        potential = CoulombPotential(smearing=pme_arguments.get("smearing", None), 
-                                     exclusion_radius=kwargs.get("exclusion_radius", None), 
-                                     exclusion_degree=kwargs.get("exclusion_radius", 1))
-        
-        if "lr_wavelength" not in pme_arguments:
-            raise ValueError(
-                "Must specify 'lr_wavelength'."
+
+        assert (
+            pme_arguments is not None
+        ), "Must provide 'pme_arguments' as dictionary, JSON formatted string or JSON file."
+
+        # extract pme arguments
+        if isinstance(pme_arguments, str):
+            import os, json
+
+            if os.path.isfile(pme_arguments):
+                with open(pme_arguments, "r") as f:
+                    pme_arguments = json.load(f)
+            else:
+                try:
+                    pme_arguments = json.loads(pme_arguments)
+                except:
+                    import ast
+
+                    pme_arguments = ast.literal_eval(pme_arguments)
+        elif isinstance(pme_arguments, dict):
+            pass
+        else:
+            raise TypeError(
+                "'pme_arguments' must be a dictionary, JSON formatted string or a JSON file."
             )
-            
+
+        # sanity check
+        if "lr_wavelength" not in pme_arguments:
+            raise ValueError("Must specify 'lr_wavelength'.")
+
+        # set up PME calculator
+        potential = CoulombPotential(
+            smearing=pme_arguments.get("smearing", None),
+            exclusion_radius=kwargs.get("exclusion_radius", None),
+            exclusion_degree=kwargs.get("exclusion_radius", 1),
+        )
+
         self.pme = EwaldCalculator(
             potential=potential,
             lr_wavelength=pme_arguments.get("lr_wavelength", None),
             full_neighbor_list=pme_arguments.get("full_neighbor_list", False),
             prefactor=pme_arguments.get("prefactor", 1.0),
         )
-        
+
+        self.extra_readouts = torch.nn.ModuleList()
+
+        from e3nn import o3
+
+        self.extra_readouts.append(
+            LinearReadoutBlock(
+                o3.Irreps("0e"),
+                o3.Irreps("0e"),
+                kwargs.get("cueq_config", None),
+                kwargs.get("oeq_config", None),
+            )
+        )
+
     def forward(
         self,
         data: Dict[str, torch.Tensor],
@@ -317,29 +358,82 @@ class MACEPME(ScaleShiftMACE):
         compute_atomic_stresses: bool = False,
         lammps_mliap: bool = False,
     ) -> Dict[str, Optional[torch.Tensor]]:
-        
-        unique_batches = torch.unique(batch)  # Get unique batch indices
 
-        results = []
+        results = super().forward(
+            data,
+            training=training,
+            compute_force=compute_force,
+            compute_virials=compute_virials,
+            compute_stress=compute_stress,
+            compute_displacement=compute_displacement,
+            compute_hessian=compute_hessian,
+            compute_edge_forces=compute_edge_forces,
+            compute_atomic_stresses=compute_atomic_stresses,
+            lammps_mliap=lammps_mliap,
+        )
+
+        # sanity check
+        unique_batches = torch.unique(data["batch"])  # Get unique batch indices
+        assert len(unique_batches) == len(
+            results["energy"]
+        ), "Batch size mismatch between data and computed results"
+
         for i in unique_batches:
-            mask = batch == i  # Create a mask for the i-th configuration
+            mask = data["batch"] == i  # Create a mask for the i-th configuration
             # Calculate the potential energy for the i-th configuration
-            r_raw_now, q_now = r[mask], q[mask]
-            if cell is not None:
-                box_now = cell[i]  # Get the box for the i-th configuration
-            
-            # check if the box is periodic or not
-            if cell is None or torch.linalg.det(box_now) < 1e-6:
-                # the box is not periodic, we use the direct sum
-                pot = self.compute_potential_realspace(r_raw_now, q_now)
-            else:
-                # the box is periodic, we use the reciprocal sum
-                pot = self.compute_potential_triclinic(r_raw_now, q_now, box_now)
-            results.append(pot)
 
-        return torch.stack(results, dim=0).sum(dim=1) 
-        
-    #     def forward(
+            # number of atoms
+            Natoms = int(sum(mask))
+
+            charges = data["charges"][mask]
+            cell = data["cell"][i * 3 : (i + 1) * 3, :]
+            positions = data["positions"][mask, :]
+
+            # sanity check
+            assert charges.shape == (
+                Natoms,
+            ), f"Error: 'charges' should have shape ({Natoms},) but they have {charges.shape}"
+            assert cell.shape == (
+                3,
+                3,
+            ), f"Error: 'cell' should have shape (3,3) but it has {cell.shape}"
+            assert positions.shape == (
+                Natoms,
+                3,
+            ), f"Error: 'positions' should have shape ({Natoms},3) but it has {positions.shape}"
+
+            # neighbor_indices = data['shifts']
+            # neighbor_distances = torch.dot(data['shifts'], cell)
+
+            import vesin.torch
+
+            nl = vesin.torch.NeighborList(cutoff=self.r_max, full_list=False)
+            neighbor_indices_vesin, neighbor_distances_vesin = nl.compute(
+                points=positions.to(dtype=torch.float64, device="cpu"),
+                box=cell.to(dtype=torch.float64, device="cpu"),
+                periodic=True,
+                quantities="Pd",
+            )
+
+            # electrostatic potential
+            pot = self.pme(
+                charges[:, None],  # [Natoms,Nchannels = 1]
+                cell,
+                positions,
+                neighbor_indices_vesin,
+                neighbor_distances_vesin,
+            )[
+                :, 0
+            ]  # [Natoms,Nchannels] --> [Natoms] since we have only once channel
+
+            atomic_energies = pot * charges
+            atomic_energies = self.extra_readouts[0](atomic_energies[:, None])[:, 0]
+            results["node_energy"][mask] += atomic_energies
+            results["energy"][i] += torch.sum(atomic_energies)
+
+        return results
+
+    # def forward(
     #     self,
     #     charges: torch.Tensor,
     #     cell: torch.Tensor,
