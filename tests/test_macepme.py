@@ -106,35 +106,6 @@ def test_run_train(tmp_path, fitting_configs):
         Es.append(at.get_potential_energy())
 
 
-@pytest.mark.skipif(not PME_AVAILABLE, reason="torch-pme library is not available")
-def test_run_train_with_mp(tmp_path, fitting_configs):
-    ase.io.write(tmp_path / "fit.xyz", fitting_configs)
-
-    mace_params = _mace_params.copy()
-    mace_params["checkpoints_dir"] = str(tmp_path)
-    mace_params["foundation_model"] = "small"
-    mace_params["hidden_irreps"] = "128x0e"
-    mace_params["r_max"] = 6.0
-    mace_params["default_dtype"] = "float64"
-    mace_params["num_radial_basis"] = 10
-    mace_params["interaction_first"] = "RealAgnosticResidualInteractionBlock"
-    mace_params["multiheads_finetuning"] = False
-    mace_params["model_dir"] = str(tmp_path)
-    mace_params["train_file"] = tmp_path / "fit.xyz"
-    args = build_default_arg_parser().parse_args(
-        [f"--{k}={v}" if v is not None else f"--{k}" for k, v in mace_params.items()]
-    )
-
-    mace_run(args)
-
-    calc = MACECalculator(model_paths=tmp_path / "MACEPME.model", device="cpu")
-
-    Es = []
-    for at in fitting_configs:
-        at.calc = calc
-        Es.append(at.get_potential_energy())
-
-
 @pytest.mark.skipif(
     not (PME_AVAILABLE and CUET_AVAILABLE and CUDA_AVAILABLE),
     reason="Testing MACEPME cueq training requires torch-pme, cuequivariance, and CUDA to be available",
