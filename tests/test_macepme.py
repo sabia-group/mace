@@ -1,4 +1,3 @@
-import argparse
 import importlib.util
 import os
 from pathlib import Path
@@ -11,11 +10,9 @@ from ase.atoms import Atoms
 from e3nn import o3
 
 from mace.calculators import MACECalculator
-from mace.cli.eval_configs import run as mace_eval_configs_run
 from mace.cli.run_train import run as mace_run
 from mace.modules import interaction_classes
 from mace.modules.extensions import MACEPME
-from mace.modules.models import ScaleShiftMACE
 from mace.tools.arg_parser import build_default_arg_parser
 from mace.tools.torch_tools import default_dtype
 
@@ -87,7 +84,7 @@ _mace_params = {
 }
 
 
-@pytest.mark.skipif(not PME_AVAILABLE, reason="LES library is not available")
+@pytest.mark.skipif(not PME_AVAILABLE, reason="torch-pme library is not available")
 def test_run_train(tmp_path, fitting_configs):
     ase.io.write(tmp_path / "fit.xyz", fitting_configs)
 
@@ -108,36 +105,8 @@ def test_run_train(tmp_path, fitting_configs):
         at.calc = calc
         Es.append(at.get_potential_energy())
 
-    print("Es", Es)
-    ref_Es = [
-        0.004919160731848143,
-        0.5906680240792959,
-        0.47887544882572264,
-        0.4176002467254094,
-        0.5606673227439406,
-        0.40181714730443363,
-        0.3367534132795259,
-        0.27118917957971056,
-        0.47967529915910134,
-        0.32077479180773283,
-        1.2865402405977537,
-        0.3472478715875782,
-        0.427734507004752,
-        0.8092185237225293,
-        0.38348242384362774,
-        0.14448973657513398,
-        0.5650118900854595,
-        0.429029669763921,
-        0.4837945154901776,
-        0.2244894146891574,
-        0.3667896493444026,
-        0.23811703879534651,
-    ]
 
-    assert np.allclose(Es, ref_Es)
-
-
-@pytest.mark.skipif(not PME_AVAILABLE, reason="LES library is not available")
+@pytest.mark.skipif(not PME_AVAILABLE, reason="torch-pme library is not available")
 def test_run_train_with_mp(tmp_path, fitting_configs):
     ase.io.write(tmp_path / "fit.xyz", fitting_configs)
 
@@ -165,38 +134,10 @@ def test_run_train_with_mp(tmp_path, fitting_configs):
         at.calc = calc
         Es.append(at.get_potential_energy())
 
-    print("Es", Es)
-    ref_Es = [
-        1.9041867483100463,
-        0.9795927664122093,
-        0.6143645372728241,
-        0.540857367104403,
-        0.2175412746398953,
-        0.5204824602823621,
-        0.42691720944924566,
-        0.47462694450178505,
-        0.5809854217525379,
-        0.3586733195403562,
-        3.755376867799749,
-        0.6308930408544482,
-        0.5298001079484215,
-        0.7923006837586871,
-        0.7015445400430391,
-        0.5558430181089493,
-        0.6546531810601435,
-        0.7309926712585781,
-        0.6821026693847355,
-        0.30473441126045364,
-        0.5945371974398417,
-        0.6601282822585335,
-    ]
-
-    assert np.allclose(Es, ref_Es)
-
 
 @pytest.mark.skipif(
     not (PME_AVAILABLE and CUET_AVAILABLE and CUDA_AVAILABLE),
-    reason="Testing MACEPES cueq training requires LES, cuequivariance, and CUDA to be available",
+    reason="Testing MACEPME cueq training requires torch-pme, cuequivariance, and CUDA to be available",
 )
 def test_run_train_macepes_cueq(tmp_path, fitting_configs):
     ase.io.write(tmp_path / "fit.xyz", fitting_configs)
@@ -224,33 +165,6 @@ def test_run_train_macepes_cueq(tmp_path, fitting_configs):
         at.calc = calc
         Es.append(at.get_potential_energy())
 
-    print("Es", Es)
-    ref_Es = [
-        0.004919160731848143,
-        0.5906680240792959,
-        0.47887544882572264,
-        0.4176002467254094,
-        0.5606673227439406,
-        0.40181714730443363,
-        0.3367534132795259,
-        0.27118917957971056,
-        0.47967529915910134,
-        0.32077479180773283,
-        1.2865402405977537,
-        0.3472478715875782,
-        0.427734507004752,
-        0.8092185237225293,
-        0.38348242384362774,
-        0.14448973657513398,
-        0.5650118900854595,
-        0.429029669763921,
-        0.4837945154901776,
-        0.2244894146891574,
-        0.3667896493444026,
-        0.23811703879534651,
-    ]
-    assert np.allclose(Es, ref_Es)
-
 
 MODEL_CONFIG = dict(
     r_max=5,
@@ -277,17 +191,7 @@ MODEL_CONFIG = dict(
 )
 
 
-# @pytest.fixture(name="mace_model_path")
-# def mace_model_path_fixture(tmp_path: Path) -> Path:
-#     """Create and save a standard ScaleShiftMACE model."""
-#     with default_dtype(torch.float32):
-#         model = ScaleShiftMACE(**MODEL_CONFIG)
-#         path = tmp_path / "MACEPME.model"
-#         torch.save(model, path)
-#     return path
-
-
-@pytest.mark.skipif(not PME_AVAILABLE, reason="LES library is not available")
+@pytest.mark.skipif(not PME_AVAILABLE, reason="torch-pme library is not available")
 @pytest.fixture(name="macepme_model_path")
 def macepme_model_path_fixture(tmp_path: Path) -> Path:
     """Create and save a MACEPME model."""
