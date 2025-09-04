@@ -268,3 +268,82 @@ class MACELES(ScaleShiftMACE):
             "latent_charges": les_q,
             "BEC": les_result["BEC"],
         }
+
+@compile_mode("script")
+class MACEPME(ScaleShiftMACE):
+    
+    def __init__(self, pme_arguments: Optional[Dict] = None, **kwargs):
+        super().__init__(**kwargs)
+        try:
+            from torchpme import EwaldCalculator
+        except ImportError as exc:
+            raise ImportError(
+                "Cannot import 'EwaldCalculator'. Please install the 'torch-pme' library from https://github.com/lab-cosmo/torch-pme.git."
+            ) from exc
+            
+        try:
+            from torchpme import CoulombPotential
+        except ImportError as exc:
+            raise ImportError(
+                "Cannot import 'CoulombPotential'. Please install the 'torch-pme' library from https://github.com/lab-cosmo/torch-pme.git."
+            ) from exc
+        
+        potential = CoulombPotential(smearing=pme_arguments.get("smearing", None), 
+                                     exclusion_radius=kwargs.get("exclusion_radius", None), 
+                                     exclusion_degree=kwargs.get("exclusion_radius", 1))
+        
+        if "lr_wavelength" not in pme_arguments:
+            raise ValueError(
+                "Must specify 'lr_wavelength'."
+            )
+            
+        self.pme = EwaldCalculator(
+            potential=potential,
+            lr_wavelength=pme_arguments.get("lr_wavelength", None),
+            full_neighbor_list=pme_arguments.get("full_neighbor_list", False),
+            prefactor=pme_arguments.get("prefactor", 1.0),
+        )
+        
+    def forward(
+        self,
+        data: Dict[str, torch.Tensor],
+        training: bool = False,
+        compute_force: bool = True,
+        compute_virials: bool = False,
+        compute_stress: bool = False,
+        compute_displacement: bool = False,
+        compute_hessian: bool = False,
+        compute_edge_forces: bool = False,
+        compute_atomic_stresses: bool = False,
+        lammps_mliap: bool = False,
+    ) -> Dict[str, Optional[torch.Tensor]]:
+        
+        unique_batches = torch.unique(batch)  # Get unique batch indices
+
+        results = []
+        for i in unique_batches:
+            mask = batch == i  # Create a mask for the i-th configuration
+            # Calculate the potential energy for the i-th configuration
+            r_raw_now, q_now = r[mask], q[mask]
+            if cell is not None:
+                box_now = cell[i]  # Get the box for the i-th configuration
+            
+            # check if the box is periodic or not
+            if cell is None or torch.linalg.det(box_now) < 1e-6:
+                # the box is not periodic, we use the direct sum
+                pot = self.compute_potential_realspace(r_raw_now, q_now)
+            else:
+                # the box is periodic, we use the reciprocal sum
+                pot = self.compute_potential_triclinic(r_raw_now, q_now, box_now)
+            results.append(pot)
+
+        return torch.stack(results, dim=0).sum(dim=1) 
+        
+    #     def forward(
+    #     self,
+    #     charges: torch.Tensor,
+    #     cell: torch.Tensor,
+    #     positions: torch.Tensor,
+    #     neighbor_indices: torch.Tensor,
+    #     neighbor_distances: torch.Tensor,
+    # ):
