@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 import argparse
-import json
+import numpy as np
 import torch
+import json
 from ase.io import read
 import vesin.torch
 from torchpme.tuning import tune_pme
@@ -13,19 +14,22 @@ def main():
     parser = argparse.ArgumentParser(
         description="Tune PME parameters for a system from an extxyz file."
     )
-    parser.add_argument("input", help="Path to input extxyz dataset")
-    parser.add_argument("output", help="Path to output JSON file")
-    parser.add_argument(
-        "--cutoff", type=float, default=6.0, help="Neighbor cutoff radius (Å)"
+    parser.add_argument("-i","--input", help="input extxyz dataset")
+    parser.add_argument("-o","--output", help="output JSON file")
+    parser.add_argument("-c","--charges", help="keyword or the charges (default: %(default)s)s", default="Qs")
+    parser.add_argument("-r","--cutoff", type=float, default=6.0, help="Neighbor cutoff radius (Å) (default: %(default)s)"
     )
     args = parser.parse_args()
 
     # Load system from extxyz
-    atoms = read(args.input)
+    structures = read(args.input,index=":",format="extxyz")
+    
+    ii = np.argmax([ a.get_global_number_of_atoms() for a in structures ])
+    atoms = structures[ii]
 
     positions = torch.tensor(atoms.get_positions(), dtype=dtype)
     cell = torch.tensor(atoms.cell.array, dtype=dtype)
-    charges = torch.tensor(atoms.get_initial_charges().reshape(-1, 1), dtype=dtype)
+    charges = torch.tensor(atoms.arrays[args.charges].reshape(-1, 1), dtype=dtype)
 
     # Build neighbor list
     nl = vesin.torch.NeighborList(cutoff=args.cutoff, full_list=False)
