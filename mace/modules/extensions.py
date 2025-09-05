@@ -300,12 +300,12 @@ class MACEPME(ScaleShiftMACE):
                 "Cannot import 'CoulombPotential'. Please install the 'torch-pme' library from https://github.com/lab-cosmo/torch-pme.git."
             ) from exc
 
-        try:
-            import vesin.torch  # used in forward method
-        except ImportError as exc:
-            raise ImportError(
-                "Cannot import 'vesin.torch'. Please install it through 'pip install .[examples]' in 'torch-pme' library from https://github.com/lab-cosmo/torch-pme.git."
-            ) from exc
+        # try:
+        #     import vesin.torch  # used in forward method
+        # except ImportError as exc:
+        #     raise ImportError(
+        #         "Cannot import 'vesin.torch'. Please install it through 'pip install .[examples]' in 'torch-pme' library from https://github.com/lab-cosmo/torch-pme.git."
+        #     ) from exc
 
         assert (
             pme_arguments is not None
@@ -377,7 +377,7 @@ class MACEPME(ScaleShiftMACE):
         lammps_mliap: bool = False,
     ) -> Dict[str, Optional[torch.Tensor]]:
 
-        import vesin.torch
+        # import vesin.torch
 
         # ---------------------------- #
         # short-ranged MACE models
@@ -403,7 +403,10 @@ class MACEPME(ScaleShiftMACE):
             results["energy"]
         ), "Batch size mismatch between data and computed results"
 
-        # ---------------------------- #
+        assert data["batch"].ndim == 1
+        assert data["positions"].shape[1] == 3
+        assert data["batch"].shape[0] == data["positions"].shape[0]
+
         # loop over structures (batching is not supported yet in torch-pme)
         for i in unique_batches:
 
@@ -431,22 +434,13 @@ class MACEPME(ScaleShiftMACE):
                 3,
             ), f"Error: 'positions' should have shape ({Natoms},3) but it has {positions.shape}"
 
-            # interatomic distances
-            nl = vesin.torch.NeighborList(cutoff=self.r_max, full_list=False)
-            neighbor_indices_vesin, neighbor_distances_vesin = nl.compute(
-                points=positions.to(dtype=torch.float64, device="cpu"),
-                box=cell.to(dtype=torch.float64, device="cpu"),
-                periodic=True,
-                quantities="Pd",
-            )
-
             # electrostatic potential
             pot = self.pme(
                 charges[:, None],  # [Natoms,Nchannels = 1]
                 cell,  # [3,3]
-                positions,  # [Natoma,3]
-                neighbor_indices_vesin,  # [??]
-                neighbor_distances_vesin,  # [??]
+                positions,  # [Natoms,3]
+                data["neighbor_indices"],  # [??,2]
+                data["neighbor_distances"],  # [??,]
             )
 
             # [Natoms,Nchannels] --> [Natoms] since we have only once channel

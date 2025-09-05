@@ -49,6 +49,10 @@ class AtomicData(torch_geometric.data.Data):
     dipole_weight: torch.Tensor
     charges_weight: torch.Tensor
     polarizability_weight: torch.Tensor
+    neighbor_indices: torch.Tensor
+    neighbor_distances: torch.Tensor
+    num_edge_index: torch.Tensor
+    num_neighbor: torch.Tensor
 
     def __init__(
         self,
@@ -78,6 +82,10 @@ class AtomicData(torch_geometric.data.Data):
         total_charge: Optional[torch.Tensor] = None,  # [,]
         total_spin: Optional[torch.Tensor] = None,  # [,]
         pbc: Optional[torch.Tensor] = None,  # [, 3]
+        neighbor_indices: Optional[torch.Tensor] = None,
+        neighbor_distances: Optional[torch.Tensor] = None,
+        num_edge_index: Optional[torch.Tensor] = None,
+        num_neighbor: Optional[torch.Tensor] = None,
     ):
         # Check shapes
         num_nodes = node_attrs.shape[0]
@@ -107,6 +115,10 @@ class AtomicData(torch_geometric.data.Data):
         assert total_spin is None or len(total_spin.shape) == 0
         assert polarizability is None or polarizability.shape == (1, 3, 3)
         assert pbc is None or (pbc.shape[-1] == 3 and pbc.dtype == torch.bool)
+        assert neighbor_indices is None or neighbor_indices.shape[1] == 2
+        assert neighbor_distances is None or neighbor_distances.ndim == 1
+        assert num_edge_index is None or num_edge_index.ndim == 0
+        assert num_neighbor is None or num_neighbor.ndim == 0
         # Aggregate data
         data = {
             "num_nodes": num_nodes,
@@ -136,6 +148,10 @@ class AtomicData(torch_geometric.data.Data):
             "total_charge": total_charge,
             "total_spin": total_spin,
             "pbc": pbc,
+            "neighbor_indices": neighbor_indices,
+            "neighbor_distances": neighbor_distances,
+            "num_edge_index": num_edge_index,
+            "num_neighbor": num_neighbor,
         }
         super().__init__(**data)
 
@@ -156,6 +172,22 @@ class AtomicData(torch_geometric.data.Data):
             pbc=deepcopy(config.pbc),
             cell=deepcopy(config.cell),
         )
+        try:
+            import vesin.torch
+
+            try:
+                nl = vesin.torch.NeighborList(cutoff=cutoff, full_list=False)
+                neighbor_indices, neighbor_distances = nl.compute(
+                    points=torch.from_numpy(config.positions),
+                    box=torch.from_numpy(config.cell),
+                    periodic=any(config.pbc),
+                    quantities="Pd",
+                )
+                num_neighbor = neighbor_indices.shape[0]
+            except Exception as e:
+                raise e
+        except:
+            neighbor_indices = neighbor_distances = num_neighbor = None
         indices = atomic_numbers_to_indices(config.atomic_numbers, z_table=z_table)
         one_hot = to_one_hot(
             torch.tensor(indices, dtype=torch.long).unsqueeze(-1),
@@ -365,6 +397,10 @@ class AtomicData(torch_geometric.data.Data):
             polarizability=polarizability,
             total_spin=total_spin,
             pbc=pbc,
+            neighbor_indices=neighbor_indices,
+            neighbor_distances=neighbor_distances,
+            num_edge_index=torch.tensor(edge_index.shape[1], dtype=torch.long),
+            num_neighbor=torch.tensor(num_neighbor, dtype=torch.long),
         )
 
 
