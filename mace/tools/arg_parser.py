@@ -955,7 +955,7 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         "--pme_arguments",
         help="String of dictionary containing the arguments for the PME module",
         type=str,
-        default={},
+        default=None,
         required=False,
     )
     return parser
