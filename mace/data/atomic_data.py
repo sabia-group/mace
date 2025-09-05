@@ -400,7 +400,11 @@ class AtomicData(torch_geometric.data.Data):
             neighbor_indices=neighbor_indices,
             neighbor_distances=neighbor_distances,
             num_edge_index=torch.tensor(edge_index.shape[1], dtype=torch.long),
-            num_neighbor=torch.tensor(num_neighbor, dtype=torch.long),
+            num_neighbor=(
+                None
+                if num_neighbor is None
+                else torch.tensor(num_neighbor, dtype=torch.long)
+            ),
         )
 
 
