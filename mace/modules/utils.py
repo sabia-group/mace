@@ -641,7 +641,7 @@ def prepare_graph(
     )
 
 
-def neighbor_ranges(num_neighbor: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+def neighbor_ranges(num_neighbor: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Compute start and end indices for each atom's neighbor list
     in a flattened neighbor array.
