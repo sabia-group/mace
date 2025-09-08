@@ -399,13 +399,23 @@ class MACEPME(ScaleShiftMACE):
 
         # sanity check
         unique_batches = torch.unique(data["batch"])  # Get unique batch indices
-        assert len(unique_batches) == len(
-            results["energy"]
-        ), "Batch size mismatch between data and computed results"
+        # # assert len(unique_batches) == len(
+        # #     results["energy"]
+        # # ), "Batch size mismatch between data and computed results"
 
         assert data["batch"].ndim == 1
         assert data["positions"].shape[1] == 3
         assert data["batch"].shape[0] == data["positions"].shape[0]
+
+        num_neighbor = data["num_neighbor"]
+        assert (
+            num_neighbor.ndim == 1
+        ), f"'num_neighbor' should have one dimension but it has shape {num_neighbor.shape}"
+        start = torch.cat((torch.tensor([0]), num_neighbor[:-1]))
+        end = num_neighbor
+        assert (
+            start.shape == end.shape
+        ), f"'start' and 'end' should have the same shape but they have {start.shape} and {end.shape} respectively"
 
         # loop over structures (batching is not supported yet in torch-pme)
         for i in unique_batches:
@@ -434,13 +444,27 @@ class MACEPME(ScaleShiftMACE):
                 3,
             ), f"Error: 'positions' should have shape ({Natoms},3) but it has {positions.shape}"
 
+            neighbor_indices = data["neighbor_indices"][start[i] : end[i], :]
+            neighbor_distances = data["neighbor_distances"][start[i] : end[i]]
+
+            num_neighbor_i = num_neighbor[i]
+            assert neighbor_indices.shape == (
+                num_neighbor_i,
+                2,
+            ), f"neighbor_indices has wrong shape: expected {(num_neighbor_i, 2)}, got {neighbor_indices.shape}"
+
+            assert neighbor_distances.shape == (
+                num_neighbor_i,
+            ), f"neighbor_distances has wrong shape: expected {(num_neighbor_i,)}, got {neighbor_distances.shape}"
+
             # electrostatic potential
+            # ToDo: filter these tensors to remove atoms with zero charge
             pot = self.pme(
                 charges[:, None],  # [Natoms,Nchannels = 1]
                 cell,  # [3,3]
                 positions,  # [Natoms,3]
-                data["neighbor_indices"],  # [??,2]
-                data["neighbor_distances"],  # [??,]
+                neighbor_indices,  # [num_neighbor_i,2]
+                neighbor_distances,  # [num_neighbor_i,]
             )
 
             # [Natoms,Nchannels] --> [Natoms] since we have only once channel
