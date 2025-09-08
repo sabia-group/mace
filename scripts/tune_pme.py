@@ -11,13 +11,23 @@ dtype = torch.float64
 
 
 def main():
-    argv = {"metavar" : "\b",}
+    argv = {
+        "metavar": "\b",
+    }
     parser = argparse.ArgumentParser(
         description="Tune parameters for a system from an extxyz file."
     )
     parser.add_argument("-i", "--input", **argv, type=str, help="input extxyz dataset")
-    parser.add_argument("-o", "--output",**argv, type=str, help="output JSON file")
-    parser.add_argument("-m", "--method",**argv, type=str, help="method [%(choices)s] (default: %(default)s)", default="ewald", choices=["ewald","pme","p3m"])
+    parser.add_argument("-o", "--output", **argv, type=str, help="output JSON file")
+    parser.add_argument(
+        "-m",
+        "--method",
+        **argv,
+        type=str,
+        help="method [%(choices)s] (default: %(default)s)",
+        default="ewald",
+        choices=["ewald", "pme", "p3m"],
+    )
     parser.add_argument(
         "-c",
         "--charges",
@@ -31,7 +41,7 @@ def main():
         "--cutoff",
         **argv,
         type=float,
-        default=6.0,
+        default=5.0,
         help="Neighbor cutoff radius (Å) (default: %(default)s)",
     )
     args = parser.parse_args()
@@ -64,21 +74,26 @@ def main():
         quantities="Pd",
     )
     print(f"Neighbor list computed. Found neighbors for each atom.")
-    
+
     if args.method == "ewald":
         from torchpme.tuning import tune_ewald
+
         tune = tune_ewald
         print("Using 'tune_ewald' for tuning")
     elif args.method == "pme":
         from torchpme.tuning import tune_pme
+
         tune = tune_pme
         print("Using 'tune_pme' for tuning")
     elif args.method == "p3m":
         from torchpme.tuning import tune_p3m
+
         tune = tune_p3m
         print("Using 'tune_p3m' for tuning")
     else:
-        raise ValueError(f"'--method' can be only 'ewald', 'pme', or 'p3m' but you provided {args.method}")
+        raise ValueError(
+            f"'--method' can be only 'ewald', 'pme', or 'p3m' but you provided {args.method}"
+        )
 
     # Tune
     print("Tuning parameters...")
