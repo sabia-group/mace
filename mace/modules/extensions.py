@@ -5,7 +5,12 @@ from e3nn.util.jit import compile_mode
 
 from mace.modules.blocks import LinearReadoutBlock, NonLinearReadoutBlock
 from mace.modules.models import ScaleShiftMACE
-from mace.modules.utils import get_atomic_virials_stresses, get_outputs, prepare_graph
+from mace.modules.utils import (
+    get_atomic_virials_stresses,
+    get_outputs,
+    prepare_graph,
+    neighbor_ranges,
+)
 from mace.modules.wrapper_ops import CuEquivarianceConfig
 from mace.tools.scatter import scatter_sum
 
@@ -399,23 +404,23 @@ class MACEPME(ScaleShiftMACE):
 
         # sanity check
         unique_batches = torch.unique(data["batch"])  # Get unique batch indices
-        # # assert len(unique_batches) == len(
-        # #     results["energy"]
-        # # ), "Batch size mismatch between data and computed results"
+        # assert len(unique_batches) == len(
+        #     results["energy"]
+        # ), "Batch size mismatch between data and computed results"
 
         assert data["batch"].ndim == 1
         assert data["positions"].shape[1] == 3
         assert data["batch"].shape[0] == data["positions"].shape[0]
 
         num_neighbor = data["num_neighbor"]
+        assert len(unique_batches) == len(
+            num_neighbor
+        ), f"Length mismatch: unique_batches has length {len(unique_batches)}, but num_neighbor has length {len(num_neighbor)}"
+
         assert (
             num_neighbor.ndim == 1
         ), f"'num_neighbor' should have one dimension but it has shape {num_neighbor.shape}"
-        start = torch.cat((torch.tensor([0]), num_neighbor[:-1]))
-        end = num_neighbor
-        assert (
-            start.shape == end.shape
-        ), f"'start' and 'end' should have the same shape but they have {start.shape} and {end.shape} respectively"
+        start, end = neighbor_ranges(num_neighbor)
 
         # loop over structures (batching is not supported yet in torch-pme)
         for i in unique_batches:
@@ -457,8 +462,9 @@ class MACEPME(ScaleShiftMACE):
                 num_neighbor_i,
             ), f"neighbor_distances has wrong shape: expected {(num_neighbor_i,)}, got {neighbor_distances.shape}"
 
-            # electrostatic potential
             # ToDo: filter these tensors to remove atoms with zero charge
+
+            # electrostatic potential
             pot = self.pme(
                 charges[:, None],  # [Natoms,Nchannels = 1]
                 cell,  # [3,3]
