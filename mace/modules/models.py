@@ -708,7 +708,9 @@ class AtomicDipolesMACE(torch.nn.Module):
         self.readouts = torch.nn.ModuleList()
         self.readouts.append(
             LinearDipoleReadoutBlock(
-                hidden_irreps, dipole_only=True, cueq_config=cueq_config
+                irreps_in=hidden_irreps,
+                irreps_out=o3.Irreps("1x1o"),
+                cueq_config=cueq_config,
             )
         )
 
@@ -746,17 +748,19 @@ class AtomicDipolesMACE(torch.nn.Module):
             if i == num_interactions - 2:
                 self.readouts.append(
                     NonLinearDipoleReadoutBlock(
-                        hidden_irreps_out,
-                        MLP_irreps,
-                        gate,
-                        dipole_only=True,
+                        irreps_in=hidden_irreps_out,
+                        irreps_out=o3.Irreps("1x1o"),
+                        MLP_irreps=MLP_irreps,
+                        gata=gate,
                         cueq_config=cueq_config,
                     )
                 )
             else:
                 self.readouts.append(
                     LinearDipoleReadoutBlock(
-                        hidden_irreps, dipole_only=True, cueq_config=cueq_config
+                        irreps_in=hidden_irreps,
+                        irreps_out=o3.Irreps("1x1o"),
+                        cueq_config=cueq_config,
                     )
                 )
 
@@ -1199,6 +1203,9 @@ class EnergyDipoleMACE(torch.nn.Module):
         cueq_config: Optional[Dict[str, Any]] = None,  # pylint: disable=unused-argument
         oeq_config: Optional[Dict[str, Any]] = None,  # pylint: disable=unused-argument
         edge_irreps: Optional[o3.Irreps] = None,  # pylint: disable=unused-argument
+        heads: Optional[List[str]] = None,
+        atomic_inter_scale: float = 1.0,
+        atomic_inter_shift: float = 0.0,
     ):
         super().__init__()
         self.register_buffer(
@@ -1234,6 +1241,15 @@ class EnergyDipoleMACE(torch.nn.Module):
         # Interactions and readouts
         self.atomic_energies_fn = AtomicEnergiesBlock(atomic_energies)
 
+        if heads is None:
+            heads = ["Default"]
+        self.heads = heads
+
+        self.energy_scale_shift = ScaleShiftBlock(
+            scale=atomic_inter_scale, shift=atomic_inter_shift
+        )
+        self.dipole_scale_shift = ScaleShiftBlock(scale=atomic_inter_scale, shift=0.0)
+
         inter = interaction_cls_first(
             node_attrs_irreps=node_attr_irreps,
             node_feats_irreps=node_feats_irreps,
@@ -1266,7 +1282,9 @@ class EnergyDipoleMACE(torch.nn.Module):
         self.readouts = torch.nn.ModuleList()
         self.readouts.append(
             LinearDipoleReadoutBlock(
-                hidden_irreps, dipole_only=False, cueq_config=cueq_config
+                irreps_in=hidden_irreps,
+                irreps_out=o3.Irreps(f"{len(heads)}x0e+{len(heads)}x1o"),
+                cueq_config=cueq_config,
             )
         )
 
@@ -1304,17 +1322,21 @@ class EnergyDipoleMACE(torch.nn.Module):
             if i == num_interactions - 2:
                 self.readouts.append(
                     NonLinearDipoleReadoutBlock(
-                        hidden_irreps_out,
-                        MLP_irreps,
-                        gate,
-                        dipole_only=False,
+                        irreps_in=hidden_irreps_out,
+                        MLP_irreps=(len(heads) * MLP_irreps).simplify(),
+                        irreps_out=o3.Irreps(f"{len(heads)}x0e+{len(heads)}x1o"),
+                        gate=gate,
                         cueq_config=cueq_config,
+                        num_heads=len(heads),
                     )
                 )
             else:
                 self.readouts.append(
                     LinearDipoleReadoutBlock(
-                        hidden_irreps, dipole_only=False, cueq_config=cueq_config
+                        irreps_in=hidden_irreps,
+                        irreps_out=o3.Irreps(f"{len(heads)}x0e+{len(heads)}x1o"),
+                        cueq_config=cueq_config,
+                        num_heads=len(heads),
                     )
                 )
 
@@ -1330,6 +1352,11 @@ class EnergyDipoleMACE(torch.nn.Module):
         compute_atomic_stresses: bool = False,  # pylint: disable=W0613
     ) -> Dict[str, Optional[torch.Tensor]]:
         # Setup
+        node_heads = (
+            data["head"][data["batch"]]
+            if "head" in data
+            else torch.zeros_like(data["batch"])
+        )
         data["node_attrs"].requires_grad_(True)
         data["positions"].requires_grad_(True)
         num_graphs = data["ptr"].numel() - 1
@@ -1355,7 +1382,7 @@ class EnergyDipoleMACE(torch.nn.Module):
 
         # Atomic energies
         node_e0 = self.atomic_energies_fn(data["node_attrs"])[
-            num_atoms_arange, data["head"][data["batch"]]
+            num_atoms_arange, node_heads
         ]
         e0 = scatter_sum(
             src=node_e0, index=data["batch"], dim=-1, dim_size=num_graphs
@@ -1375,10 +1402,10 @@ class EnergyDipoleMACE(torch.nn.Module):
 
         # Interactions
         energies = [e0]
-        node_energies_list = [node_e0]
+        # node_energies_list = [node_e0]
         dipoles = []
-        for interaction, product, readout in zip(
-            self.interactions, self.products, self.readouts
+        for i, (interaction, product, readout) in enumerate(
+            zip(self.interactions, self.products, self.readouts)
         ):
             node_feats, sc = interaction(
                 node_attrs=data["node_attrs"],
@@ -1393,23 +1420,34 @@ class EnergyDipoleMACE(torch.nn.Module):
                 sc=sc,
                 node_attrs=data["node_attrs"],
             )
-            node_out = readout(node_feats).squeeze(-1)  # [n_nodes, ]
+
+            # feat_idx = -1 if len(self.readouts) == 1 else i
+            # node_new = readout(node_feats, node_heads)[
+            #     num_atoms_arange, node_heads
+            # ]
+
+            node_out = readout(node_feats, node_heads).squeeze(-1)  # [n_nodes, ]
             # node_energies = readout(node_feats).squeeze(-1)  # [n_nodes, ]
-            node_energies = node_out[:, 0]
+            node_energies = node_out[:, 0][:, None][num_atoms_arange, node_heads]
             energy = scatter_sum(
                 src=node_energies, index=data["batch"], dim=-1, dim_size=num_graphs
             )  # [n_graphs,]
             energies.append(energy)
-            node_dipoles = node_out[:, 1:]
+            node_dipoles = node_out[:, 1:][:, None][num_atoms_arange, node_heads]
             dipoles.append(node_dipoles)
 
         # Compute the energies and dipoles
         contributions = torch.stack(energies, dim=-1)
+        contributions = self.energy_scale_shift(contributions, node_heads)
         total_energy = torch.sum(contributions, dim=-1)  # [n_graphs, ]
-        node_energy_contributions = torch.stack(node_energies_list, dim=-1)
-        node_energy = torch.sum(node_energy_contributions, dim=-1)  # [n_nodes, ]
+
+        # node_energy_contributions = torch.stack(node_energies_list, dim=-1)
+        # node_energy = torch.sum(node_energy_contributions, dim=-1)  # [n_nodes, ]
+
         dipoles = torch.stack(dipoles, dim=-1)  # [n_nodes,3,n_contributions]
+        dipoles = self.dipole_scale_shift(dipoles, node_heads)
         atomic_dipoles = torch.sum(dipoles, dim=-1)  # [n_nodes,3]
+
         # delta_dipole = scatter_sum(
         #     src=atomic_dipoles,
         #     index=data["batch"].unsqueeze(-1),
@@ -1444,12 +1482,12 @@ class EnergyDipoleMACE(torch.nn.Module):
         )
         return {
             "energy": total_energy,
-            "node_energy": node_energy,
-            "contributions": contributions,
+            # "node_energy": node_energy,
+            # "contributions": contributions,
             "forces": forces,
             "virials": virials,
             "stress": stress,
-            "displacement": displacement,
+            # "displacement": displacement,
             "dipole": total_dipole,
             "atomic_dipoles": atomic_dipoles,
             "baseline-atomic_dipoles": baseline_atomic,

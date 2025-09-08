@@ -79,7 +79,8 @@ def load_foundations_elements(
             model.interactions[i].skip_tp.weight = torch.nn.Parameter(
                 model_foundations.interactions[i]
                 .skip_tp.weight.reshape(
-                    num_channels_foundation,
+                    num_channels_foundation
+                    * len(model.interactions[i].skip_tp.irreps_in1),
                     num_species_foundations,
                     num_channels_foundation,
                 )[:, indices_weights, :]
