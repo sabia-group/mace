@@ -178,12 +178,18 @@ class AtomicData(torch_geometric.data.Data):
             try:
                 nl = vesin.torch.NeighborList(cutoff=cutoff, full_list=False)
                 neighbor_indices, neighbor_distances = nl.compute(
-                    points=torch.from_numpy(config.positions),
-                    box=torch.from_numpy(config.cell),
+                    points=torch.from_numpy(
+                        config.positions, dtype=torch.get_default_dtype()
+                    ),
+                    box=torch.from_numpy(config.cell, dtype=torch.get_default_dtype()),
                     periodic=any(config.pbc),
                     quantities="Pd",
                 )
                 num_neighbor = neighbor_indices.shape[0]
+                neighbor_distances = neighbor_distances.to(
+                    dtype=torch.get_default_dtype()
+                )
+                neighbor_indices = neighbor_indices.to(dtype=torch.get_default_dtype())
             except Exception as e:
                 raise e
         except:
