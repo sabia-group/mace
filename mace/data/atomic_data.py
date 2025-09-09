@@ -182,10 +182,8 @@ class AtomicData(torch_geometric.data.Data):
         if use_vesin:
             nl = vesin.torch.NeighborList(cutoff=cutoff, full_list=False)
             neighbor_indices, neighbor_distances = nl.compute(
-                points=torch.from_numpy(
-                    config.positions, dtype=torch.get_default_dtype()
-                ),
-                box=torch.from_numpy(config.cell, dtype=torch.get_default_dtype()),
+                points=torch.from_numpy(config.positions),
+                box=torch.from_numpy(config.cell),
                 periodic=any(config.pbc),
                 quantities="Pd",
             )
