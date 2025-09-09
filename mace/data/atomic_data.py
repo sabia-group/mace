@@ -172,12 +172,11 @@ class AtomicData(torch_geometric.data.Data):
             pbc=deepcopy(config.pbc),
             cell=deepcopy(config.cell),
         )
-        use_vesin = True
         try:
             import vesin.torch
 
             use_vesin = True
-        except:
+        except ImportError:
             use_vesin = False
 
         if use_vesin:
