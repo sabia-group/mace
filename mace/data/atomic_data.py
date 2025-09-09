@@ -189,7 +189,7 @@ class AtomicData(torch_geometric.data.Data):
             )
             num_neighbor = neighbor_indices.shape[0]
             neighbor_distances = neighbor_distances.to(dtype=torch.get_default_dtype())
-            neighbor_indices = neighbor_indices.to(dtype=torch.get_default_dtype())
+            neighbor_indices = neighbor_indices.to(dtype=torch.long)
         else:
             neighbor_indices = neighbor_distances = num_neighbor = None
 
