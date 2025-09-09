@@ -1404,6 +1404,9 @@ class EnergyDipoleMACE(torch.nn.Module):
         energies = [e0]
         # node_energies_list = [node_e0]
         dipoles = []
+        
+        node_energies_list = []
+        node_dipoles_list = []
         for i, (interaction, product, readout) in enumerate(
             zip(self.interactions, self.products, self.readouts)
         ):
@@ -1427,26 +1430,33 @@ class EnergyDipoleMACE(torch.nn.Module):
             # ]
 
             node_out = readout(node_feats, node_heads).squeeze(-1)  # [n_nodes, ]
+            
             # node_energies = readout(node_feats).squeeze(-1)  # [n_nodes, ]
             node_energies = node_out[:, 0][:, None][num_atoms_arange, node_heads]
-            energy = scatter_sum(
-                src=node_energies, index=data["batch"], dim=-1, dim_size=num_graphs
-            )  # [n_graphs,]
-            energies.append(energy)
+            node_energies_list.append(node_energies)
+            
+            # energy = scatter_sum(
+            #     src=node_energies, index=data["batch"], dim=-1, dim_size=num_graphs
+            # )  # [n_graphs,]
+            # energies.append(energy)
             node_dipoles = node_out[:, 1:][:, None][num_atoms_arange, node_heads]
-            dipoles.append(node_dipoles)
+            node_dipoles_list.append(node_dipoles)
+            
+            # dipoles.append(node_dipoles)
 
         # Compute the energies and dipoles
-        contributions = torch.stack(energies, dim=-1)
-        contributions = self.energy_scale_shift(contributions, node_heads)
-        total_energy = torch.sum(contributions, dim=-1)  # [n_graphs, ]
+        node_energies = torch.sum(torch.stack(node_energies_list, dim=0), dim=0)
+        node_energies = self.energy_scale_shift(node_energies, node_heads)
+        total_energy = scatter_sum(
+            src=node_energies, index=data["batch"], dim=-1, dim_size=num_graphs
+        )
 
         # node_energy_contributions = torch.stack(node_energies_list, dim=-1)
         # node_energy = torch.sum(node_energy_contributions, dim=-1)  # [n_nodes, ]
 
-        dipoles = torch.stack(dipoles, dim=-1)  # [n_nodes,3,n_contributions]
-        dipoles = self.dipole_scale_shift(dipoles, node_heads)
-        atomic_dipoles = torch.sum(dipoles, dim=-1)  # [n_nodes,3]
+        dipoles = torch.sum(torch.stack(node_dipoles_list, dim=0), dim=0)
+        atomic_dipoles = self.dipole_scale_shift(dipoles.T, node_heads).T
+        # atomic_dipoles = torch.sum(dipoles, dim=-1)  # [n_nodes,3]
 
         # delta_dipole = scatter_sum(
         #     src=atomic_dipoles,
