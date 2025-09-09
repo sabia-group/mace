@@ -292,7 +292,7 @@ def plot(
             )
 
         ax.set_xlabel("Epoch")
-        ax.set_xlim(left=min_epoch)
+        ax.set_xlim(0, min(int(train_data["epoch"] * 1.2), min_epoch))
         ax.grid(True, linestyle="--", alpha=0.5)
 
         fig.savefig(
