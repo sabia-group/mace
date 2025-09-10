@@ -4,7 +4,7 @@ import torch
 from e3nn.util.jit import compile_mode
 
 from mace.modules.blocks import LinearReadoutBlock, NonLinearReadoutBlock
-from mace.modules.models import ScaleShiftMACE
+from mace.modules.models import ScaleShiftMACE, EnergyDipoleMACE
 from mace.modules.utils import (
     get_atomic_virials_stresses,
     get_outputs,
@@ -276,9 +276,9 @@ class MACELES(ScaleShiftMACE):
 
 
 @compile_mode("script")
-class MACEPME(ScaleShiftMACE):
+class PME(torch.nn.Module):
     """
-    MACE + Particle Mesh Ewald.
+    <Some MACE model> + Particle Mesh Ewald.
 
     Class that adds a long-ranged Coulomb interaction based on Ewald summation to a short-ranged MACE model.
     You need to install 'torch-pme' (https://github.com/lab-cosmo/torch-pme.git) and 'vesin' (pip install .[examples] in 'torch-pme').
@@ -492,3 +492,17 @@ class MACEPME(ScaleShiftMACE):
             results["energy"][i] += total_electrostatic_energy
 
         return results
+
+
+@compile_mode("script")
+class MACEPME(PME, ScaleShiftMACE):
+    """
+    ScaleShiftMACE + Particle Mesh Ewald.
+    """
+
+
+@compile_mode("script")
+class EnergyDipoleMACEPME(PME, EnergyDipoleMACE):
+    """
+    EnergyDipoleMACE + Particle Mesh Ewald.
+    """
