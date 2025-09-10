@@ -305,12 +305,12 @@ class MACEPME(ScaleShiftMACE):
                 "Cannot import 'CoulombPotential'. Please install the 'torch-pme' library from https://github.com/lab-cosmo/torch-pme.git."
             ) from exc
 
-        # try:
-        #     import vesin.torch  # used in forward method
-        # except ImportError as exc:
-        #     raise ImportError(
-        #         "Cannot import 'vesin.torch'. Please install it through 'pip install .[examples]' in 'torch-pme' library from https://github.com/lab-cosmo/torch-pme.git."
-        #     ) from exc
+        try:
+            import vesin.torch  # used in forward method
+        except ImportError as exc:
+            raise ImportError(
+                "Cannot import 'vesin.torch'. Please install it through 'pip install .[examples]' in 'torch-pme' library from https://github.com/lab-cosmo/torch-pme.git."
+            ) from exc
 
         assert (
             pme_arguments is not None
@@ -382,7 +382,7 @@ class MACEPME(ScaleShiftMACE):
         lammps_mliap: bool = False,
     ) -> Dict[str, Optional[torch.Tensor]]:
 
-        # import vesin.torch
+        import vesin.torch
 
         # ---------------------------- #
         # short-ranged MACE models
@@ -404,23 +404,13 @@ class MACEPME(ScaleShiftMACE):
 
         # sanity check
         unique_batches = torch.unique(data["batch"])  # Get unique batch indices
-        # assert len(unique_batches) == len(
-        #     results["energy"]
-        # ), "Batch size mismatch between data and computed results"
+        assert len(unique_batches) == len(
+            results["energy"]
+        ), "Batch size mismatch between data and computed results"
 
         assert data["batch"].ndim == 1
         assert data["positions"].shape[1] == 3
         assert data["batch"].shape[0] == data["positions"].shape[0]
-
-        num_neighbor = data["num_neighbor"]
-        assert len(unique_batches) == len(
-            num_neighbor
-        ), f"Length mismatch: unique_batches has length {len(unique_batches)}, but num_neighbor has length {len(num_neighbor)}"
-
-        assert (
-            num_neighbor.ndim == 1
-        ), f"'num_neighbor' should have one dimension but it has shape {num_neighbor.shape}"
-        start, end = neighbor_ranges(num_neighbor)
 
         # loop over structures (batching is not supported yet in torch-pme)
         for i in unique_batches:
@@ -432,9 +422,12 @@ class MACEPME(ScaleShiftMACE):
             Natoms = int(sum(mask))
 
             # structure properties
-            charges = data["charges"][mask]
+            charges = data["oxn"][mask]
             cell = data["cell"][i * 3 : (i + 1) * 3, :]
             positions = data["positions"][mask, :]
+            pbc = data["pbc"][i]
+
+            # ToDo: filter these tensors to remove atoms with zero charge
 
             # sanity check
             assert charges.shape == (
@@ -444,25 +437,34 @@ class MACEPME(ScaleShiftMACE):
                 3,
                 3,
             ), f"Error: 'cell' should have shape (3,3) but it has {cell.shape}"
+            assert pbc.shape == (
+                3,
+            ), f"Error: 'pbc' should have shape (3,) but it has {pbc.shape}"
             assert positions.shape == (
                 Natoms,
                 3,
             ), f"Error: 'positions' should have shape ({Natoms},3) but it has {positions.shape}"
 
-            neighbor_indices = data["neighbor_indices"][start[i] : end[i], :]
-            neighbor_distances = data["neighbor_distances"][start[i] : end[i]]
+            # check autograd
+            assert (
+                positions.requires_grad
+            ), "'positions should have attribute 'requires_grad' equal to True"
 
-            num_neighbor_i = num_neighbor[i]
-            assert neighbor_indices.shape == (
-                num_neighbor_i,
-                2,
-            ), f"neighbor_indices has wrong shape: expected {(num_neighbor_i, 2)}, got {neighbor_indices.shape}"
+            # compute interatomic distances
+            nl = vesin.torch.NeighborList(cutoff=self.r_max, full_list=False)
+            neighbor_indices, neighbor_distances = nl.compute(
+                points=positions,
+                box=cell,
+                periodic=any(pbc),
+                quantities="Pd",
+            )
 
-            assert neighbor_distances.shape == (
-                num_neighbor_i,
-            ), f"neighbor_distances has wrong shape: expected {(num_neighbor_i,)}, got {neighbor_distances.shape}"
-
-            # ToDo: filter these tensors to remove atoms with zero charge
+            assert (
+                neighbor_distances.requires_grad
+            ), "'neighbor_distances' should have attribute 'requires_grad' equal to True"
+            assert (
+                neighbor_distances.dtype == positions.dtype
+            ), f"'neighbor_distances' should have the same dtype as 'positions' but they have {neighbor_distances.dtype} and {positions.dtype} respectively"
 
             # electrostatic potential
             pot = self.pme(
@@ -486,6 +488,7 @@ class MACEPME(ScaleShiftMACE):
             results["node_energy"][mask] += atomic_energies
 
             # compute total energy
-            results["energy"][i] += torch.sum(atomic_energies)
+            total_electrostatic_energy = torch.sum(atomic_energies)
+            results["energy"][i] += total_electrostatic_energy
 
         return results
