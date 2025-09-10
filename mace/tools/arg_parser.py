@@ -140,6 +140,7 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
             "MACE",
             "ScaleShiftMACE",
             "MACELES",
+            "MACEPME",
             "ScaleShiftBOTNet",
             "AtomicDipolesMACE",
             "AtomicDielectricMACE",
@@ -592,6 +593,12 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         default=DefaultKeys.ELEC_TEMP.value,
     )
     parser.add_argument(
+        "--oxn_key",
+        help="Key of oxidation numbers in training xyz",
+        type=str,
+        default=DefaultKeys.OXN.value,
+    )
+    parser.add_argument(
         "--total_spin_key",
         help="Key of total spin in training xyz",
         type=str,
@@ -949,6 +956,13 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
             "energy_weight",
             "forces_weight",
         ],
+    )
+    parser.add_argument(
+        "--pme_arguments",
+        help="String of dictionary containing the arguments for the PME module",
+        type=str,
+        default=None,
+        required=False,
     )
     return parser
 

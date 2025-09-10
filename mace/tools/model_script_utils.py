@@ -361,4 +361,32 @@ def _build_model(
             use_last_readout_only=args.use_last_readout_only,
             use_agnostic_product=args.use_agnostic_product,
         )
+    if args.model == "MACEPME":
+        from mace.modules.extensions import MACEPME
+
+        if args.interaction_first not in [
+            "RealAgnosticInteractionBlock",
+            "RealAgnosticDensityInteractionBlock",
+        ]:
+            args.interaction_first = "RealAgnosticInteractionBlock"
+        return MACEPME(
+            **model_config,
+            pair_repulsion=args.pair_repulsion,
+            distance_transform=args.distance_transform,
+            correlation=args.correlation,
+            gate=modules.gate_dict[args.gate],
+            interaction_cls_first=modules.interaction_classes[args.interaction_first],
+            MLP_irreps=o3.Irreps(args.MLP_irreps),
+            atomic_inter_scale=args.std,
+            atomic_inter_shift=[0.0] * len(heads),
+            radial_MLP=ast.literal_eval(args.radial_MLP),
+            radial_type=args.radial_type,
+            heads=heads,
+            embedding_specs=args.embedding_specs,
+            use_embedding_readout=args.use_embedding_readout,
+            use_last_readout_only=args.use_last_readout_only,
+            use_agnostic_product=args.use_agnostic_product,
+            pme_arguments=args.pme_arguments,
+        )
+
     raise RuntimeError(f"Unknown model: '{args.model}'")
