@@ -82,10 +82,7 @@ class AtomicData(torch_geometric.data.Data):
         total_charge: Optional[torch.Tensor] = None,  # [,]
         total_spin: Optional[torch.Tensor] = None,  # [,]
         pbc: Optional[torch.Tensor] = None,  # [, 3]
-        neighbor_indices: Optional[torch.Tensor] = None,
-        neighbor_distances: Optional[torch.Tensor] = None,
-        num_edge_index: Optional[torch.Tensor] = None,
-        num_neighbor: Optional[torch.Tensor] = None,
+        oxn: Optional[torch.Tensor] = None,  # [n_nodes, ]
     ):
         # Check shapes
         num_nodes = node_attrs.shape[0]
@@ -110,15 +107,13 @@ class AtomicData(torch_geometric.data.Data):
         assert virials is None or virials.shape == (1, 3, 3)
         assert dipole is None or dipole.shape[-1] == 3
         assert charges is None or charges.shape == (num_nodes,)
+        assert oxn is None or oxn.shape == (num_nodes,)
         assert elec_temp is None or len(elec_temp.shape) == 0
         assert total_charge is None or len(total_charge.shape) == 0
         assert total_spin is None or len(total_spin.shape) == 0
         assert polarizability is None or polarizability.shape == (1, 3, 3)
         assert pbc is None or (pbc.shape[-1] == 3 and pbc.dtype == torch.bool)
-        assert neighbor_indices is None or neighbor_indices.shape[1] == 2
-        assert neighbor_distances is None or neighbor_distances.ndim == 1
-        assert num_edge_index is None or num_edge_index.ndim == 0
-        assert num_neighbor is None or num_neighbor.ndim == 0
+
         # Aggregate data
         data = {
             "num_nodes": num_nodes,
@@ -143,15 +138,12 @@ class AtomicData(torch_geometric.data.Data):
             "virials": virials,
             "dipole": dipole,
             "charges": charges,
+            "oxn": oxn,
             "polarizability": polarizability,
             "elec_temp": elec_temp,
             "total_charge": total_charge,
             "total_spin": total_spin,
             "pbc": pbc,
-            "neighbor_indices": neighbor_indices,
-            "neighbor_distances": neighbor_distances,
-            "num_edge_index": num_edge_index,
-            "num_neighbor": num_neighbor,
         }
         super().__init__(**data)
 
@@ -172,26 +164,6 @@ class AtomicData(torch_geometric.data.Data):
             pbc=deepcopy(config.pbc),
             cell=deepcopy(config.cell),
         )
-        try:
-            import vesin.torch
-
-            use_vesin = True
-        except ImportError:
-            use_vesin = False
-
-        if use_vesin:
-            nl = vesin.torch.NeighborList(cutoff=cutoff, full_list=False)
-            neighbor_indices, neighbor_distances = nl.compute(
-                points=torch.from_numpy(config.positions),
-                box=torch.from_numpy(config.cell),
-                periodic=any(config.pbc),
-                quantities="Pd",
-            )
-            num_neighbor = neighbor_indices.shape[0]
-            neighbor_distances = neighbor_distances.to(dtype=torch.get_default_dtype())
-            neighbor_indices = neighbor_indices.to(dtype=torch.long)
-        else:
-            neighbor_indices = neighbor_distances = num_neighbor = None
 
         indices = atomic_numbers_to_indices(config.atomic_numbers, z_table=z_table)
         one_hot = to_one_hot(
@@ -336,6 +308,14 @@ class AtomicData(torch_geometric.data.Data):
             if config.properties.get("charges") is not None
             else torch.zeros(num_atoms, dtype=torch.get_default_dtype())
         )
+        oxn = (
+            torch.tensor(config.properties.get("oxn"))
+            if config.properties.get("oxn") is not None
+            else torch.zeros(num_atoms, dtype=torch.get_default_dtype())
+        )
+        if not torch.all(oxn == oxn.floor()):
+            raise ValueError(f"oxn must contain integer values")
+        oxn = oxn.to(dtype=torch.get_default_dtype())
         elec_temp = (
             torch.tensor(
                 config.properties.get("elec_temp"),
@@ -397,19 +377,12 @@ class AtomicData(torch_geometric.data.Data):
             virials=virials,
             dipole=dipole,
             charges=charges,
+            oxn=oxn,
             elec_temp=elec_temp,
             total_charge=total_charge,
             polarizability=polarizability,
             total_spin=total_spin,
             pbc=pbc,
-            neighbor_indices=neighbor_indices,
-            neighbor_distances=neighbor_distances,
-            num_edge_index=torch.tensor(edge_index.shape[1], dtype=torch.long),
-            num_neighbor=(
-                None
-                if num_neighbor is None
-                else torch.tensor(num_neighbor, dtype=torch.long)
-            ),
         )
 
 

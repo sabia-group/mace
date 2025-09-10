@@ -593,6 +593,12 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         default=DefaultKeys.ELEC_TEMP.value,
     )
     parser.add_argument(
+        "--oxn_key",
+        help="Key of oxidation numbers in training xyz",
+        type=str,
+        default=DefaultKeys.OXN.value,
+    )
+    parser.add_argument(
         "--total_spin_key",
         help="Key of total spin in training xyz",
         type=str,
