@@ -71,14 +71,14 @@ error_type = {
     ),
     "DipoleRMSE": (
         [
-            ("rmse_mu_per_atom", "RMSE MU/atom [me*ang]"),
+            ("rmse_mu_per_atom", "RMSE MU/atom [mDebye]"),
             ("rel_rmse_f", "Relative MU RMSE [%]"),
         ],
-        [("dipole", "Dipole per atom [e*ang]")],
+        [("dipole", "Dipole per atom [Debye]")],
     ),
     "DipoleMAE": (
-        [("mae_mu", "MAE MU [me*ang]"), ("rel_mae_f", "Relative MU MAE [%]")],
-        [("dipole", "Dipole per atom [e*ang]")],
+        [("mae_mu", "MAE MU [mDebye]"), ("rel_mae_f", "Relative MU MAE [%]")],
+        [("dipole", "Dipole per atom [Debye]")],
     ),
     "DipolePolarRMSE": (
         [
@@ -96,26 +96,12 @@ error_type = {
         [
             ("rmse_e_per_atom", "RMSE E/atom [meV]"),
             ("rmse_f", "RMSE F [meV / A]"),
-            ("rmse_mu_per_atom", "RMSE MU/atom [me*ang]"),
+            ("rmse_mu_per_atom", "RMSE MU/atom [mDebye]"),
         ],
         [
             ("energy", "Energy per atom [eV]"),
             ("force", "Force [eV / A]"),
-            ("dipole", "Dipole per atom [e*ang]"),
-        ],
-    ),
-    "StressDipoleRMSE": (
-        [
-            ("rmse_e_per_atom", "RMSE E/atom [meV]"),
-            ("rmse_f", "RMSE F [meV / A]"),
-            ("rmse_stress", "RMSE Stress [meV / A^3]"),
-            ("rmse_mu_per_atom", "RMSE MU/atom [me*ang]"),
-        ],
-        [
-            ("energy", "Energy per atom [eV]"),
-            ("force", "Force [eV / A]"),
-            ("stress", "Stress [eV / A^3]"),
-            ("dipole", "Dipole per atom [e*ang]"),
+            ("dipole", "Dipole per atom [Debye]"),
         ],
     ),
 }
@@ -583,16 +569,10 @@ class InferenceMetric(Metric):
             self.pred_energies_per_atom.append(output["energy"] / atoms_per_config)
 
             self.n_energy += filter_nonzero_weight(
-                batch,
-                self.ref_energies,
-                batch.weight,
-                batch.energy_weight,
+                batch, self.ref_energies, batch.weight, batch.energy_weight,
             )
             filter_nonzero_weight(
-                batch,
-                self.pred_energies,
-                batch.weight,
-                batch.energy_weight,
+                batch, self.pred_energies, batch.weight, batch.energy_weight,
             )
             filter_nonzero_weight(
                 batch,
@@ -652,18 +632,10 @@ class InferenceMetric(Metric):
             self.pred_forces.append(output["forces"])
 
             self.n_forces += filter_nonzero_weight(
-                batch,
-                self.ref_forces,
-                batch.weight,
-                batch.forces_weight,
-                spread_atoms=True,
+                batch, self.ref_forces, batch.weight, batch.forces_weight, spread_atoms=True,
             )
             filter_nonzero_weight(
-                batch,
-                self.pred_forces,
-                batch.weight,
-                batch.forces_weight,
-                spread_atoms=True,
+                batch, self.pred_forces, batch.weight, batch.forces_weight, spread_atoms=True,
             )
 
         # Stress
@@ -672,16 +644,10 @@ class InferenceMetric(Metric):
             self.pred_stress.append(output["stress"])
 
             self.n_stress += filter_nonzero_weight(
-                batch,
-                self.ref_stress,
-                batch.weight,
-                batch.stress_weight,
+                batch, self.ref_stress, batch.weight, batch.stress_weight,
             )
             filter_nonzero_weight(
-                batch,
-                self.pred_stress,
-                batch.weight,
-                batch.stress_weight,
+                batch, self.pred_stress, batch.weight, batch.stress_weight,
             )
 
         # Virials
@@ -694,16 +660,10 @@ class InferenceMetric(Metric):
             self.pred_virials_per_atom.append(output["virials"] / atoms_per_config_3d)
 
             self.n_virials += filter_nonzero_weight(
-                batch,
-                self.ref_virials,
-                batch.weight,
-                batch.virials_weight,
+                batch, self.ref_virials, batch.weight, batch.virials_weight,
             )
             filter_nonzero_weight(
-                batch,
-                self.pred_virials,
-                batch.weight,
-                batch.virials_weight,
+                batch, self.pred_virials, batch.weight, batch.virials_weight,
             )
             filter_nonzero_weight(
                 batch,
