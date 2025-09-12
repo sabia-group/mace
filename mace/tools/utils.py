@@ -9,7 +9,7 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, Iterable, Optional, Sequence, Union
+from typing import Any, Dict, Iterable, Optional, Sequence, Union, List
 
 import numpy as np
 import torch
@@ -205,3 +205,7 @@ def filter_nonzero_weight(
 
     quantity_l[-1] = filtered_q
     return 1.0
+
+
+def add_heads(x: torch.Tensor, model_heads: List[str]) -> torch.Tensor:
+    return x.repeat(len(model_heads)).clone()

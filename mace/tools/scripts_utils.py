@@ -818,14 +818,6 @@ def get_params_options(
                 "weight_decay": 0.0,
             }
         )
-    if hasattr(model, "extra_readouts") and model.extra_readouts is not None:
-        param_options["params"].append(
-            {
-                "name": "extra_readouts",
-                "params": model.extra_readouts.parameters(),
-                "weight_decay": 0.0,
-            }
-        )
     return param_options
 
 

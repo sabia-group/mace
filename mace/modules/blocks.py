@@ -62,13 +62,13 @@ class LinearReadoutBlock(torch.nn.Module):
     def __init__(
         self,
         irreps_in: o3.Irreps,
-        irrep_out: o3.Irreps = o3.Irreps("0e"),
+        irreps_out: o3.Irreps = o3.Irreps("0e"),
         cueq_config: Optional[CuEquivarianceConfig] = None,
         oeq_config: Optional[OEQConfig] = None,  # pylint: disable=unused-argument
     ):
         super().__init__()
         self.linear = Linear(
-            irreps_in=irreps_in, irreps_out=irrep_out, cueq_config=cueq_config
+            irreps_in=irreps_in, irreps_out=irreps_out, cueq_config=cueq_config
         )
 
     def forward(
@@ -87,7 +87,7 @@ class NonLinearReadoutBlock(torch.nn.Module):
         irreps_in: o3.Irreps,
         MLP_irreps: o3.Irreps,
         gate: Optional[Callable],
-        irrep_out: o3.Irreps = o3.Irreps("0e"),
+        irreps_out: o3.Irreps = o3.Irreps("0e"),
         num_heads: int = 1,
         cueq_config: Optional[CuEquivarianceConfig] = None,
         oeq_config: Optional[OEQConfig] = None,  # pylint: disable=unused-argument
@@ -100,7 +100,7 @@ class NonLinearReadoutBlock(torch.nn.Module):
         )
         self.non_linearity = nn.Activation(irreps_in=self.hidden_irreps, acts=[gate])
         self.linear_2 = Linear(
-            irreps_in=self.hidden_irreps, irreps_out=irrep_out, cueq_config=cueq_config
+            irreps_in=self.hidden_irreps, irreps_out=irreps_out, cueq_config=cueq_config
         )
 
     def forward(
@@ -121,7 +121,7 @@ class NonLinearBiasReadoutBlock(torch.nn.Module):
         irreps_in: o3.Irreps,
         MLP_irreps: o3.Irreps,
         gate: Optional[Callable],
-        irrep_out: o3.Irreps = o3.Irreps("0e"),
+        irreps_out: o3.Irreps = o3.Irreps("0e"),
         num_heads: int = 1,
         cueq_config: Optional[CuEquivarianceConfig] = None,
         oeq_config: Optional[OEQConfig] = None,  # pylint: disable=unused-argument
@@ -137,7 +137,7 @@ class NonLinearBiasReadoutBlock(torch.nn.Module):
             irreps_in=self.hidden_irreps, irreps_out=self.hidden_irreps, biases=True
         )
         self.linear_2 = o3.Linear(
-            irreps_in=self.hidden_irreps, irreps_out=irrep_out, biases=True
+            irreps_in=self.hidden_irreps, irreps_out=irreps_out, biases=True
         )
 
     def forward(
@@ -156,20 +156,24 @@ class LinearDipoleReadoutBlock(torch.nn.Module):
     def __init__(
         self,
         irreps_in: o3.Irreps,
-        dipole_only: bool = False,
+        irreps_out: o3.Irreps,
         cueq_config: Optional[CuEquivarianceConfig] = None,
         oeq_config: Optional[OEQConfig] = None,  # pylint: disable=unused-argument
+        num_heads: int = 1,
     ):
         super().__init__()
-        if dipole_only:
-            self.irreps_out = o3.Irreps("1x1o")
-        else:
-            self.irreps_out = o3.Irreps("1x0e + 1x1o")
+        self.num_heads = num_heads
+        self.irreps_out = irreps_out
         self.linear = Linear(
             irreps_in=irreps_in, irreps_out=self.irreps_out, cueq_config=cueq_config
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:  # [n_nodes, irreps]  # [..., ]
+    def forward(
+        self, x: torch.Tensor, heads: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:  # [n_nodes, irreps]  # [..., ]
+        if hasattr(self, "num_heads"):
+            if self.num_heads > 1 and heads is not None:
+                x = mask_head(x, heads, self.num_heads)
         return self.linear(x)  # [n_nodes, 1]
 
 
@@ -178,18 +182,17 @@ class NonLinearDipoleReadoutBlock(torch.nn.Module):
     def __init__(
         self,
         irreps_in: o3.Irreps,
+        irreps_out: o3.Irreps,
         MLP_irreps: o3.Irreps,
         gate: Callable,
-        dipole_only: bool = False,
         cueq_config: Optional[CuEquivarianceConfig] = None,
         oeq_config: Optional[OEQConfig] = None,  # pylint: disable=unused-argument
+        num_heads: int = 1,
     ):
         super().__init__()
+        self.num_heads = num_heads
         self.hidden_irreps = MLP_irreps
-        if dipole_only:
-            self.irreps_out = o3.Irreps("1x1o")
-        else:
-            self.irreps_out = o3.Irreps("1x0e + 1x1o")
+        self.irreps_out = irreps_out
         irreps_scalars = o3.Irreps(
             [(mul, ir) for mul, ir in MLP_irreps if ir.l == 0 and ir in self.irreps_out]
         )
@@ -214,8 +217,13 @@ class NonLinearDipoleReadoutBlock(torch.nn.Module):
             cueq_config=cueq_config,
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:  # [n_nodes, irreps]  # [..., ]
+    def forward(
+        self, x: torch.Tensor, heads: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:  # [n_nodes, irreps]  # [..., ]
         x = self.equivariant_nonlin(self.linear_1(x))
+        if hasattr(self, "num_heads"):
+            if self.num_heads > 1 and heads is not None:
+                x = mask_head(x, heads, self.num_heads)
         return self.linear_2(x)  # [n_nodes, 1]
 
 
@@ -227,8 +235,10 @@ class LinearDipolePolarReadoutBlock(torch.nn.Module):
         use_polarizability: bool = True,
         cueq_config: Optional[CuEquivarianceConfig] = None,
         oeq_config: Optional[OEQConfig] = None,  # pylint: disable=unused-argument
+        num_heads: int = 1,
     ):
         super().__init__()
+        self.num_heads = num_heads
         if use_polarizability:
             print("You will calculate the polarizability and dipole.")
             self.irreps_out = o3.Irreps("2x0e + 1x1o + 1x2e")
@@ -243,8 +253,13 @@ class LinearDipolePolarReadoutBlock(torch.nn.Module):
             irreps_in=irreps_in, irreps_out=self.irreps_out, cueq_config=cueq_config
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:  # [n_nodes, irreps]  # [..., ]
+    def forward(
+        self, x: torch.Tensor, heads: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:  # [n_nodes, irreps]  # [..., ]
         y = self.linear(x)  # [n_nodes, 1]
+        if hasattr(self, "num_heads"):
+            if self.num_heads > 1 and heads is not None:
+                x = mask_head(x, heads, self.num_heads)
         return y  # [n_nodes, 1]
 
 

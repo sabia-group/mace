@@ -79,7 +79,8 @@ def load_foundations_elements(
             model.interactions[i].skip_tp.weight = torch.nn.Parameter(
                 model_foundations.interactions[i]
                 .skip_tp.weight.reshape(
-                    num_channels_foundation,
+                    num_channels_foundation
+                    * len(model.interactions[i].skip_tp.irreps_in1),
                     num_species_foundations,
                     num_channels_foundation,
                 )[:, indices_weights, :]
@@ -181,15 +182,40 @@ def load_foundations_elements(
         model.readouts[1].linear_2.weight = torch.nn.Parameter(
             model_readouts_one_linear_2_weight
         )
-    if model_foundations.scale_shift is not None:
-        if use_scale:
-            model.scale_shift.scale = model_foundations.scale_shift.scale.repeat(
-                len(model_heads)
-            ).clone()
-        if use_shift:
-            model.scale_shift.shift = model_foundations.scale_shift.shift.repeat(
-                len(model_heads)
-            ).clone()
+
+    from mace.modules.models import ScaleShiftMACE, EnergyDipoleMACE
+    from mace.tools.utils import add_heads
+
+    if isinstance(model_foundations, ScaleShiftMACE):
+        if model_foundations.scale_shift is not None:
+            if use_scale:
+                model.scale_shift.scale = add_heads(
+                    model_foundations.scale_shift.scale, model_heads
+                )
+            if use_shift:
+                model.scale_shift.shift = add_heads(
+                    model_foundations.scale_shift.shift, model_heads
+                )
+
+    elif isinstance(model_foundations, EnergyDipoleMACE):
+        if model_foundations.energy_scale_shift is not None:
+            if use_scale:
+                model.energy_scale_shift.scale = add_heads(
+                    model_foundations.energy_scale_shift.scale, model_heads
+                )
+            if use_shift:
+                model.energy_scale_shift.shift = add_heads(
+                    model_foundations.energy_scale_shift.shift, model_heads
+                )
+        if model_foundations.dipole_scale_shift is not None and use_scale:
+            model.dipole_scale_shift.scale = add_heads(
+                model_foundations.dipole_scale_shift.scale, model_heads
+            )
+    else:
+        raise ValueError(
+            f"Fine tuning not implemented yet for {type(model_foundations)}"
+        )
+
     return model
 
 
