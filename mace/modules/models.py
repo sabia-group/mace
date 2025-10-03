@@ -830,7 +830,7 @@ class AtomicDipolesMACE(torch.nn.Module):
         # )  # [n_graphs,3]
         # total_dipole = delta_dipole + baseline
 
-        total_dipole, atomic_dipoles, baseline_atomic = get_dipole_outputs(
+        total_dipole, baseline_atomic = get_dipole_outputs(
             atomic_dipoles,
             data["ptr"],
             data["batch"],
@@ -840,7 +840,7 @@ class AtomicDipolesMACE(torch.nn.Module):
         return {
             "dipole": total_dipole,
             "atomic_dipoles": atomic_dipoles,
-            "baseline-atomic_dipoles": baseline_atomic,
+            "atomic-oxn-dipole": baseline_atomic,
         }
 
 
@@ -1435,7 +1435,7 @@ class EnergyDipoleMACE(torch.nn.Module):
             compute_stress=compute_stress,
         )
 
-        total_dipole, atomic_dipoles, baseline_atomic = get_dipole_outputs(
+        total_dipole, baseline_atomic = get_dipole_outputs(
             atomic_dipoles,
             data["ptr"],
             data["batch"],
@@ -1452,7 +1452,7 @@ class EnergyDipoleMACE(torch.nn.Module):
             "displacement": displacement,
             "dipole": total_dipole,
             "atomic_dipoles": atomic_dipoles,
-            "baseline-atomic_dipoles": baseline_atomic,
+            "atomic-oxn-dipole": baseline_atomic,
         }
 
 
@@ -1463,7 +1463,7 @@ def get_dipole_outputs(
     charges: torch.Tensor,
     positions: torch.Tensor,
     # data: Batch
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Computes the dipole outputs for the MACE model.
 
@@ -1479,7 +1479,7 @@ def get_dipole_outputs(
         Dict[str, Tensor]: Contains:
             - "dipole": [n_graphs, 3]
             - "atomic_dipoles": [n_nodes, 3]
-            - "baseline-atomic_dipoles": [n_nodes, 3]
+            - "atomic-oxn-dipole": [n_nodes, 3]
     """
     num_graphs = ptr.numel() - 1
     delta_dipole = scatter_sum(
@@ -1497,12 +1497,5 @@ def get_dipole_outputs(
     )  # [n_graphs,3], [n_nodes,3]
 
     total_dipole = delta_dipole + baseline
-    atomic_dipoles = atomic_dipoles + baseline_atomic
 
-    return total_dipole, atomic_dipoles, baseline_atomic
-
-    # return {
-    #     "dipole": total_dipole,
-    #     "atomic_dipoles": atomic_dipoles + baseline_atomic,
-    #     "baseline-atomic_dipoles": baseline_atomic,
-    # }
+    return total_dipole, baseline_atomic
