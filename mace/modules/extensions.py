@@ -291,19 +291,6 @@ class PME(torch.nn.Module):
 
     def __init__(self, pme_arguments: Optional[Dict] = None, **kwargs):
         super().__init__(**kwargs)
-        try:
-            from torchpme import EwaldCalculator
-        except ImportError as exc:
-            raise ImportError(
-                "Cannot import 'EwaldCalculator'. Please install the 'torch-pme' library from https://github.com/lab-cosmo/torch-pme.git."
-            ) from exc
-
-        try:
-            from torchpme import CoulombPotential
-        except ImportError as exc:
-            raise ImportError(
-                "Cannot import 'CoulombPotential'. Please install the 'torch-pme' library from https://github.com/lab-cosmo/torch-pme.git."
-            ) from exc
 
         try:
             import vesin.torch  # used in forward method
@@ -337,36 +324,52 @@ class PME(torch.nn.Module):
                 "'pme_arguments' must be a dictionary, JSON formatted string or a JSON file."
             )
 
-        # sanity check
-        if "lr_wavelength" not in pme_arguments:
-            raise ValueError("Must specify 'lr_wavelength'.")
+        interactions = pme_arguments["interactions"]
 
-        # set up PME calculator
-        potential = CoulombPotential(
-            smearing=pme_arguments.get("smearing", None),
-            exclusion_radius=kwargs.get("exclusion_radius", None),
-            exclusion_degree=kwargs.get("exclusion_radius", 1),
-        )
+        self.q_q = None
+        self.q_mu = None
+        self.mu_mu = None
 
-        self.pme = EwaldCalculator(
-            potential=potential,
-            lr_wavelength=pme_arguments.get("lr_wavelength", None),
-            full_neighbor_list=pme_arguments.get("full_neighbor_list", False),
-            prefactor=pme_arguments.get("prefactor", 1.0),
-        )
-
-        self.extra_readouts = torch.nn.ModuleList()
+        self.use_charges = False
+        self.use_dipoles = False
 
         from e3nn import o3
 
-        self.extra_readouts.append(
-            LinearReadoutBlock(
-                o3.Irreps("0e"),
-                o3.Irreps("0e"),
-                kwargs.get("cueq_config", None),
-                kwargs.get("oeq_config", None),
-            )
+        self.extra_readouts = torch.nn.ModuleList()
+        readout = LinearReadoutBlock(
+            o3.Irreps("0e"),
+            o3.Irreps("0e"),
+            kwargs.get("cueq_config", None),
+            kwargs.get("oeq_config", None),
         )
+
+        for interaction in interactions:
+            interaction = str(interaction).lower()
+
+            if interaction == "q-q":
+                from .long_range import ChargeCharge
+
+                self.q_q = ChargeCharge(pme_arguments["q-q"])
+                self.extra_readouts.append(readout.clone())
+                self.use_charges = True
+
+            elif interaction == "q-mu":
+                from .long_range import ChargeDipole
+
+                self.q_mu = ChargeDipole(pme_arguments["q-mu"])
+                self.extra_readouts.append(readout.clone())
+                self.use_charges = True
+                self.use_dipoles = True
+
+            elif interaction == "mu-mu":
+                from .long_range import DipoleDipole
+
+                self.mu_mu = DipoleDipole(pme_arguments["mu-mu"])
+                self.extra_readouts.append(readout.clone())
+                self.use_dipoles = True
+
+            else:
+                raise ValueError(f"Interaction '{interaction}' is not implemented")
 
     def forward(
         self,
@@ -422,17 +425,22 @@ class PME(torch.nn.Module):
             Natoms = int(sum(mask))
 
             # structure properties
-            charges = data["oxn"][mask]
             cell = data["cell"][i * 3 : (i + 1) * 3, :]
             positions = data["positions"][mask, :]
             pbc = data["pbc"][i]
 
+            pme_data = {"cell": cell, "positions": positions, "pbc": pbc}
+
+            if self.use_charges:
+                charges = data["oxn"][mask]
+                pme_data["charges"] = charges
+            if self.use_dipoles:
+                atomic_dipoles = data["atomic_dipoles"][mask]
+                pme_data["atomic_dipoles"] = atomic_dipoles
+
             # ToDo: filter these tensors to remove atoms with zero charge
 
             # sanity check
-            assert charges.shape == (
-                Natoms,
-            ), f"Error: 'charges' should have shape ({Natoms},) but they have {charges.shape}"
             assert cell.shape == (
                 3,
                 3,
@@ -444,6 +452,17 @@ class PME(torch.nn.Module):
                 Natoms,
                 3,
             ), f"Error: 'positions' should have shape ({Natoms},3) but it has {positions.shape}"
+            # if charges are needed
+            if self.use_charges:
+                assert charges.shape == (
+                    Natoms,
+                ), f"Error: 'charges' should have shape ({Natoms},) but they have {charges.shape}"
+            # if dipoles are needed
+            if self.use_dipoles:
+                assert atomic_dipoles.shape == (
+                    Natoms,
+                    3,
+                ), f"Error: 'atomic_dipoles' should have shape ({Natoms},3) but it has {atomic_dipoles.shape}"
 
             # check autograd
             assert (
@@ -466,30 +485,29 @@ class PME(torch.nn.Module):
                 neighbor_distances.dtype == positions.dtype
             ), f"'neighbor_distances' should have the same dtype as 'positions' but they have {neighbor_distances.dtype} and {positions.dtype} respectively"
 
-            # electrostatic potential
-            pot = self.pme(
-                charges[:, None],  # [Natoms,Nchannels = 1]
-                cell,  # [3,3]
-                positions,  # [Natoms,3]
-                neighbor_indices,  # [num_neighbor_i,2]
-                neighbor_distances,  # [num_neighbor_i,]
-            )
+            pme_data["neighbor_distances"] = neighbor_distances
+            pme_data["neighbor_indices"] = neighbor_indices
 
-            # [Natoms,Nchannels] --> [Natoms] since we have only once channel
-            pot = pot[:, 0]
+            # electrostatic potential(s)
+            interactions = [self.q_q, self.q_mu, self.mu_mu]
+            n = 0  # counter for the readouts
+            for interaction in interactions:
+                if interaction is None:
+                    continue
 
-            # electrostatic (atomic) energy
-            atomic_energies = pot * charges
+                atomic_energies = interaction(pme_data)
 
-            # readout to atomic_energies
-            atomic_energies = self.extra_readouts[0](atomic_energies[:, None])[:, 0]
+                # readout to atomic_energies
+                atomic_energies = self.extra_readouts[n](atomic_energies[:, None])[:, 0]
 
-            # update node_energy
-            results["node_energy"][mask] += atomic_energies
+                # update node_energy
+                results["node_energy"][mask] += atomic_energies
 
-            # compute total energy
-            total_electrostatic_energy = torch.sum(atomic_energies)
-            results["energy"][i] += total_electrostatic_energy
+                # compute total energy
+                total_electrostatic_energy = torch.sum(atomic_energies)
+                results["energy"][i] += total_electrostatic_energy
+
+                n += 1
 
         return results
 
