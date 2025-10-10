@@ -344,7 +344,7 @@ class PME(torch.nn.Module):
         )
 
         for interaction in interactions:
-            interaction = str(interaction).lower()
+            interaction = str(interaction)
 
             if interaction == "q-q":
                 from .long_range import ChargeCharge
