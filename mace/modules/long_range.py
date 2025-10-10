@@ -13,7 +13,7 @@ class NeighborModule(torch.nn.Module):
         self,
         positions: torch.Tensor,
         box: torch.Tensor,
-        periodic: bool,
+        periodic: bool = True,
         full_list: bool = False,  # include symmetric pairs
         sort: bool = True,  # sort neighbors by distance
     ) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -31,8 +31,6 @@ class NeighborModule(torch.nn.Module):
             neighbor_indices: LongTensor [num_pairs,2]
             neighbor_distances: Float64Tensor [num_pairs]
         """
-        positions = positions.double()
-        box = box.double()
         N = positions.size(0)
 
         # Compute displacement vectors
@@ -51,8 +49,8 @@ class NeighborModule(torch.nn.Module):
         mask.fill_diagonal_(0)
 
         # Mask out pairs beyond cutoff if not using full list
-        if not full_list:
-            mask = mask & (distances <= self.r_max)
+        # if not full_list:
+        mask = mask & (distances <= self.r_max)
 
         # TorchScript-compatible nonzero
         indices = mask.nonzero()  # [num_pairs,2]
