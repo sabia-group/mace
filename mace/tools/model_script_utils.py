@@ -328,7 +328,7 @@ def _build_model(
             ],
             MLP_irreps=o3.Irreps(args.MLP_irreps),
         )
-    if args.model in ["EnergyDipoleMACE", "EnergyDipoleMACEPME"]:
+    if args.model == "EnergyDipoleMACE":
         assert args.loss in [
             "energy_forces_dipole",
             "stress+dipole",
@@ -340,18 +340,6 @@ def _build_model(
 
         if args.model == "EnergyDipoleMACE":
             return modules.EnergyDipoleMACE(
-                **model_config,
-                correlation=args.correlation,
-                gate=modules.gate_dict[args.gate],
-                interaction_cls_first=modules.interaction_classes[
-                    "RealAgnosticInteractionBlock"
-                ],
-                MLP_irreps=o3.Irreps(args.MLP_irreps),
-            )
-        elif args.model == "EnergyDipoleMACEPME":
-            from mace.modules.extensions import EnergyDipoleMACEPME
-
-            return EnergyDipoleMACEPME(
                 **model_config,
                 correlation=args.correlation,
                 gate=modules.gate_dict[args.gate],

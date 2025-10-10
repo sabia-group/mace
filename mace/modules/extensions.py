@@ -1,16 +1,11 @@
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 
 import torch
 from e3nn.util.jit import compile_mode
 
 from mace.modules.blocks import LinearReadoutBlock, NonLinearReadoutBlock
 from mace.modules.models import ScaleShiftMACE, EnergyDipoleMACE
-from mace.modules.utils import (
-    get_atomic_virials_stresses,
-    get_outputs,
-    prepare_graph,
-    neighbor_ranges,
-)
+from mace.modules.utils import get_atomic_virials_stresses, get_outputs, prepare_graph
 from mace.modules.wrapper_ops import CuEquivarianceConfig
 from mace.tools.scatter import scatter_sum
 
@@ -278,10 +273,10 @@ class MACELES(ScaleShiftMACE):
 @compile_mode("script")
 class PME(torch.nn.Module):
     """
-    <Some MACE model> + Particle Mesh Ewald.
+    Particle Mesh Ewald.
 
     Class that adds a long-ranged Coulomb interaction based on Ewald summation to a short-ranged MACE model.
-    You need to install 'torch-pme' (https://github.com/lab-cosmo/torch-pme.git) and 'vesin' (pip install .[examples] in 'torch-pme').
+    You need to install 'torch-pme' (https://github.com/lab-cosmo/torch-pme.git).
     In the input file, you need to specify 'pme_arguments' as a JSON formatted string or the file path to a JSON file.
     'pme_arguments' must contain at least 'lr_wavelength'.
     You can also run 'tune_pme.py' by providing your dataset as input to get optimized parameters.
@@ -289,15 +284,8 @@ class PME(torch.nn.Module):
     Please, use the same cutoff radius in 'tune_pme.py' and in the input file for training!
     """
 
-    def __init__(self, pme_arguments: Optional[Dict] = None, **kwargs):
-        super().__init__(**kwargs)
-
-        try:
-            import vesin.torch  # used in forward method
-        except ImportError as exc:
-            raise ImportError(
-                "Cannot import 'vesin.torch'. Please install it through 'pip install .[examples]' in 'torch-pme' library from https://github.com/lab-cosmo/torch-pme.git."
-            ) from exc
+    def __init__(self, pme_arguments: Optional[Dict] = None, kwargs=Optional[Dict]):
+        super().__init__()
 
         assert (
             pme_arguments is not None
@@ -324,24 +312,26 @@ class PME(torch.nn.Module):
                 "'pme_arguments' must be a dictionary, JSON formatted string or a JSON file."
             )
 
-        interactions = pme_arguments["interactions"]
+        if "r_max" not in pme_arguments:
+            pme_arguments["r_max"] = kwargs["r_max"]
 
-        self.q_q = None
-        self.q_mu = None
-        self.mu_mu = None
+        interactions = pme_arguments["interactions"]
 
         self.use_charges = False
         self.use_dipoles = False
 
         from e3nn import o3
 
+        def get_readout():
+            return LinearReadoutBlock(
+                o3.Irreps("0e"),
+                o3.Irreps("0e"),
+                kwargs.get("cueq_config", None),
+                kwargs.get("oeq_config", None),
+            )
+
+        self.interactions = torch.nn.ModuleList()
         self.extra_readouts = torch.nn.ModuleList()
-        readout = LinearReadoutBlock(
-            o3.Irreps("0e"),
-            o3.Irreps("0e"),
-            kwargs.get("cueq_config", None),
-            kwargs.get("oeq_config", None),
-        )
 
         for interaction in interactions:
             interaction = str(interaction)
@@ -349,71 +339,56 @@ class PME(torch.nn.Module):
             if interaction == "q-q":
                 from .long_range import ChargeCharge
 
-                self.q_q = ChargeCharge(pme_arguments["q-q"])
-                self.extra_readouts.append(readout.clone())
+                self.interactions.append(ChargeCharge(pme_arguments["q-q"]))
+                self.extra_readouts.append(get_readout())
                 self.use_charges = True
 
             elif interaction == "q-mu":
                 from .long_range import ChargeDipole
 
-                self.q_mu = ChargeDipole(pme_arguments["q-mu"])
-                self.extra_readouts.append(readout.clone())
+                self.interactions.append(ChargeDipole(pme_arguments["q-mu"]))
+                self.extra_readouts.append(get_readout())
                 self.use_charges = True
                 self.use_dipoles = True
 
             elif interaction == "mu-mu":
                 from .long_range import DipoleDipole
 
-                self.mu_mu = DipoleDipole(pme_arguments["mu-mu"])
-                self.extra_readouts.append(readout.clone())
+                self.interactions.append(DipoleDipole(pme_arguments["mu-mu"]))
+                self.extra_readouts.append(get_readout())
                 self.use_dipoles = True
 
             else:
                 raise ValueError(f"Interaction '{interaction}' is not implemented")
 
+        from .long_range import NeighborModule
+
+        self.neighbor = NeighborModule(pme_arguments["r_max"])
+
+        self.register_buffer(
+            "r_max", torch.tensor(pme_arguments["r_max"], dtype=torch.float64)
+        )
+
     def forward(
         self,
-        data: Dict[str, torch.Tensor],
-        training: bool = False,
-        compute_force: bool = True,
-        compute_virials: bool = False,
-        compute_stress: bool = False,
-        compute_displacement: bool = False,
-        compute_hessian: bool = False,
-        compute_edge_forces: bool = False,
-        compute_atomic_stresses: bool = False,
-        lammps_mliap: bool = False,
-    ) -> Dict[str, Optional[torch.Tensor]]:
-
-        import vesin.torch
-
-        # ---------------------------- #
-        # short-ranged MACE models
-        results = super().forward(
-            data,
-            training=training,
-            compute_force=compute_force,
-            compute_virials=compute_virials,
-            compute_stress=compute_stress,
-            compute_displacement=compute_displacement,
-            compute_hessian=compute_hessian,
-            compute_edge_forces=compute_edge_forces,
-            compute_atomic_stresses=compute_atomic_stresses,
-            lammps_mliap=lammps_mliap,
-        )
+        data: Dict[str, torch.Tensor],  # input data
+        results: Dict[str, torch.Tensor],  # short-range results
+    ) -> Dict[str, torch.Tensor]:
 
         # ---------------------------- #
         # long-ranged Coulomb potential
 
         # sanity check
         unique_batches = torch.unique(data["batch"])  # Get unique batch indices
-        assert len(unique_batches) == len(
-            results["energy"]
-        ), "Batch size mismatch between data and computed results"
 
         assert data["batch"].ndim == 1
         assert data["positions"].shape[1] == 3
         assert data["batch"].shape[0] == data["positions"].shape[0]
+
+        out_results = {
+            "energy": torch.zeros(len(unique_batches)),
+            "node_energy": torch.zeros(len(data["positions"])),
+        }
 
         # loop over structures (batching is not supported yet in torch-pme)
         for i in unique_batches:
@@ -431,11 +406,14 @@ class PME(torch.nn.Module):
 
             pme_data = {"cell": cell, "positions": positions, "pbc": pbc}
 
+            charges = torch.empty(0)
+            atomic_dipoles = torch.empty(0)
+
             if self.use_charges:
-                charges = data["oxn"][mask]
+                charges = results["charges"][mask]
                 pme_data["charges"] = charges
             if self.use_dipoles:
-                atomic_dipoles = data["atomic_dipoles"][mask]
+                atomic_dipoles = results["atomic_dipoles"][mask]
                 pme_data["atomic_dipoles"] = atomic_dipoles
 
             # ToDo: filter these tensors to remove atoms with zero charge
@@ -469,14 +447,24 @@ class PME(torch.nn.Module):
                 positions.requires_grad
             ), "'positions should have attribute 'requires_grad' equal to True"
 
-            # compute interatomic distances
-            nl = vesin.torch.NeighborList(cutoff=self.r_max, full_list=False)
-            neighbor_indices, neighbor_distances = nl.compute(
-                points=positions,
-                box=cell,
-                periodic=any(pbc),
-                quantities="Pd",
+            neighbor_indices, neighbor_distances = self.neighbor(
+                positions, cell, bool(any(pbc))
             )
+
+            # import vesin.torch
+            # nl = vesin.torch.NeighborList(cutoff=self.r_max, full_list=False)
+            # a, b = nl.compute(
+            #     points=positions,
+            #     box=cell,
+            #     periodic=any(pbc),
+            #     quantities="Pd",
+            # )
+
+            # b, ii = torch.sort(b)
+            # a=a[ii]
+
+            # assert torch.allclose(a,neighbor_indices)
+            # assert torch.allclose(b,neighbor_distances)
 
             assert (
                 neighbor_distances.requires_grad
@@ -489,38 +477,18 @@ class PME(torch.nn.Module):
             pme_data["neighbor_indices"] = neighbor_indices
 
             # electrostatic potential(s)
-            interactions = [self.q_q, self.q_mu, self.mu_mu]
-            n = 0  # counter for the readouts
-            for interaction in interactions:
-                if interaction is None:
-                    continue
+            for interaction, readout in zip(self.interactions, self.extra_readouts):
 
                 atomic_energies = interaction(pme_data)
 
                 # readout to atomic_energies
-                atomic_energies = self.extra_readouts[n](atomic_energies[:, None])[:, 0]
+                atomic_energies = readout(atomic_energies[:, None])[:, 0]
 
                 # update node_energy
-                results["node_energy"][mask] += atomic_energies
+                out_results["node_energy"][mask] = atomic_energies
 
                 # compute total energy
                 total_electrostatic_energy = torch.sum(atomic_energies)
-                results["energy"][i] += total_electrostatic_energy
+                out_results["energy"][i] = total_electrostatic_energy
 
-                n += 1
-
-        return results
-
-
-@compile_mode("script")
-class MACEPME(PME, ScaleShiftMACE):
-    """
-    ScaleShiftMACE + Particle Mesh Ewald.
-    """
-
-
-@compile_mode("script")
-class EnergyDipoleMACEPME(PME, EnergyDipoleMACE):
-    """
-    EnergyDipoleMACE + Particle Mesh Ewald.
-    """
+        return out_results

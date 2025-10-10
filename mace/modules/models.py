@@ -1198,7 +1198,8 @@ class EnergyDipoleMACE(torch.nn.Module):
         radial_MLP: Optional[List[int]] = None,
         cueq_config: Optional[Dict[str, Any]] = None,  # pylint: disable=unused-argument
         oeq_config: Optional[Dict[str, Any]] = None,  # pylint: disable=unused-argument
-        edge_irreps: Optional[o3.Irreps] = None,  # pylint: disable=unused-argument
+        edge_irreps: Optional[o3.Irreps] = None,  # pylint: disable=unused-argument,
+        pme_arguments: Optional[o3.Irreps] = None,  # pylint: disable=unused-argument
     ):
         super().__init__()
         self.register_buffer(
@@ -1318,6 +1319,15 @@ class EnergyDipoleMACE(torch.nn.Module):
                     )
                 )
 
+        self.pme = None
+        if pme_arguments is not None:
+            from .extensions import PME
+
+            self.pme = PME(
+                pme_arguments,
+                {"cueq_config": cueq_config, "oeq_config": oeq_config, "r_max": r_max},
+            )
+
     def forward(
         self,
         data: Dict[str, torch.Tensor],
@@ -1424,6 +1434,16 @@ class EnergyDipoleMACE(torch.nn.Module):
         # )  # [n_graphs,3]
         # total_dipole = delta_dipole + baseline
 
+        # long range
+        if self.pme is not None:
+            short_results = {
+                "charges": data["oxn"],
+                "atomic_dipoles": atomic_dipoles,
+            }
+            long_results = self.pme(data, short_results)
+            total_energy = total_energy + long_results["energy"]
+            node_energy = node_energy + long_results["node_energy"]
+
         forces, virials, stress, _, _ = get_outputs(
             energy=total_energy,
             positions=data["positions"],
@@ -1439,7 +1459,7 @@ class EnergyDipoleMACE(torch.nn.Module):
             atomic_dipoles,
             data["ptr"],
             data["batch"],
-            data["charges"],
+            data["oxn"],
             data["positions"],
         )
         return {

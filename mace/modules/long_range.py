@@ -1,10 +1,82 @@
 import torch
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
+from e3nn.util.jit import compile_mode
+
+
+@compile_mode("script")
+class NeighborModule(torch.nn.Module):
+    def __init__(self, r_max: float):
+        super().__init__()
+        self.r_max = r_max
+
+    def forward(
+        self,
+        positions: torch.Tensor,
+        box: torch.Tensor,
+        periodic: bool,
+        full_list: bool = False,  # include symmetric pairs
+        sort: bool = True,  # sort neighbors by distance
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Compute neighbor list indices and distances using PyTorch only.
+
+        Args:
+            positions: [N,3] tensor of atomic positions
+            box: [3,3] tensor of simulation cell vectors
+            periodic: whether to apply periodic boundary conditions
+            full_list: if True, include both (i,j) and (j,i) pairs
+            sort: if True, sort neighbors by distance (ascending)
+
+        Returns:
+            neighbor_indices: LongTensor [num_pairs,2]
+            neighbor_distances: Float64Tensor [num_pairs]
+        """
+        positions = positions.double()
+        box = box.double()
+        N = positions.size(0)
+
+        # Compute displacement vectors
+        disp = positions.view(N, 1, 3) - positions.view(1, N, 3)
+        if periodic:
+            box_inv = torch.inverse(box)
+            frac_disp = torch.matmul(disp, box_inv)
+            frac_disp = frac_disp - frac_disp.round()
+            disp = torch.matmul(frac_disp, box)
+
+        # Compute pairwise distances
+        distances = torch.norm(disp, dim=2)
+
+        # Mask out self-pairs
+        mask = torch.ones_like(distances, dtype=torch.bool)
+        mask.fill_diagonal_(0)
+
+        # Mask out pairs beyond cutoff if not using full list
+        if not full_list:
+            mask = mask & (distances <= self.r_max)
+
+        # TorchScript-compatible nonzero
+        indices = mask.nonzero()  # [num_pairs,2]
+        neighbor_indices = indices
+        neighbor_distances = distances[indices[:, 0], indices[:, 1]]
+
+        # For half list, remove symmetric duplicates: keep only i < j
+        if not full_list:
+            keep_mask = neighbor_indices[:, 0] < neighbor_indices[:, 1]
+            neighbor_indices = neighbor_indices[keep_mask]
+            neighbor_distances = neighbor_distances[keep_mask]
+
+        # Sort neighbors by distance if requested
+        if sort and neighbor_distances.numel() > 0:
+            sorted_distances, sort_idx = torch.sort(neighbor_distances)
+            neighbor_indices = neighbor_indices[sort_idx]
+            neighbor_distances = sorted_distances
+
+        return neighbor_indices, neighbor_distances
 
 
 class LongRange(torch.nn.Module):
-    def __init__(self, pme_arguments: Optional[Dict]):
-
+    def __init__(self, pme_arguments: Dict):
+        super().__init__()
         # sanity checks
         if not isinstance(pme_arguments, dict):
             raise TypeError("'pme_arguments' must be a dictionary.")
@@ -14,7 +86,7 @@ class LongRange(torch.nn.Module):
 
 
 class ChargeCharge(LongRange):
-    def __init__(self, pme_arguments: Optional[Dict] = None, **kwargs):
+    def __init__(self, pme_arguments: Dict):
         super().__init__(pme_arguments)
         try:
             from torchpme import EwaldCalculator
@@ -33,8 +105,8 @@ class ChargeCharge(LongRange):
         # set up PME calculator
         potential = CoulombPotential(
             smearing=pme_arguments.get("smearing", None),
-            exclusion_radius=kwargs.get("exclusion_radius", None),
-            exclusion_degree=kwargs.get("exclusion_radius", 1),
+            exclusion_radius=pme_arguments.get("exclusion_radius", None),
+            exclusion_degree=pme_arguments.get("exclusion_radius", 1),
         )
 
         self.pme = EwaldCalculator(
