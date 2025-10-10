@@ -123,7 +123,7 @@ def test_mace():
     )
     batch = next(iter(data_loader))
     output1 = model(batch.to_dict(), {"training":True})
-    output2 = model_compiled(batch.to_dict(), training=True)
+    output2 = model_compiled(batch.to_dict(), {"training":True})
     assert torch.allclose(output1["energy"][0], output2["energy"][0])
     assert torch.allclose(output2["energy"][0], output2["energy"][1])
 
@@ -183,7 +183,7 @@ def test_dipole_mace():
     batch = next(iter(data_loader))
     output_compiled = model_compiled(
         batch.to_dict(),
-        training=True,
+        {"training":True}
     )
 
     assert np.allclose(
@@ -312,7 +312,7 @@ def test_energy_dipole_mace():
     batch = next(iter(data_loader))
     output_compiled = model_compiled(
         batch.to_dict(),
-        training=True,
+        {"training":True}
     )
 
     # test energy is invariant

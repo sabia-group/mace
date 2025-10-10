@@ -103,8 +103,8 @@ def test_mace(device, default_dtype):  # pylint: disable=W0621
     model_compiled = torch.compile(tmp_model, mode="default")
 
     batch = create_batch(device)
-    output1 = model_defaults(batch, training=True)
-    output2 = model_compiled(batch, training=True)
+    output1 = model_defaults(batch, {"training":True})
+    output2 = model_compiled(batch, {"training":True})
     assert_close(output1["energy"], output2["energy"])
     assert_close(output1["forces"], output2["forces"])
 
