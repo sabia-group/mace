@@ -493,7 +493,7 @@ def run(args) -> None:
         args.compute_polarizability = True
     else:
         dipole_only = False
-        if "EnergyDipoleMACE" in args.model:
+        if args.model == "EnergyDipoleMACE":
             args.compute_dipole = True
             args.compute_energy = True
             args.compute_forces = True
@@ -1012,23 +1012,7 @@ def run(args) -> None:
                         _extra_files=extra_files,
                     )
                 except Exception as e:  # pylint: disable=W0718
-                    logging.error(f"Model compilation failed: {e}")
-                    traceback.print_exc()
-                    
-                try:
-                    path_scripted = Path(args.model_dir) / (
-                        args.name + "_scripted.model"
-                    )
-                    logging.info(f"Scripting model, saving metadata to {path_scripted}")
-                    model_scripted = jit.script(deepcopy(model_to_save))
-                    torch.jit.save(
-                        model_scripted,
-                        path_scripted,
-                        _extra_files=extra_files,
-                    )
-                except Exception as e:  # pylint: disable=W0718
-                    logging.error(f"Model scripting failed: {e}")
-                    traceback.print_exc()
+                    pass
 
         logging.info("Computing metrics for training, validation, and test sets")
         for param in model.parameters():

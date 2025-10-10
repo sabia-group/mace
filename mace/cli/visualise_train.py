@@ -495,12 +495,10 @@ def model_inference(
             batch_dict = batch.to_dict()
             output = model(
                 batch_dict,
-                {
-                    "training": False,
-                    "compute_force": output_args.get("forces", False),
-                    "compute_virials": output_args.get("virials", False),
-                    "compute_stress": output_args.get("stress", False),
-                },
+                training=False,
+                compute_force=output_args.get("forces", False),
+                compute_virials=output_args.get("virials", False),
+                compute_stress=output_args.get("stress", False),
             )
 
             results = scatter_metric(batch, output)

@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional
 
 import torch
 from e3nn.util.jit import compile_mode
@@ -13,11 +13,6 @@ from mace.modules.utils import (
 )
 from mace.modules.wrapper_ops import CuEquivarianceConfig
 from mace.tools.scatter import scatter_sum
-
-try:
-    from .long_range import get_neighborlist
-except:
-    pass
 
 
 def _copy_mace_readout(
@@ -280,10 +275,10 @@ class MACELES(ScaleShiftMACE):
         }
 
 
-# @compile_mode("script")
+@compile_mode("script")
 class PME(torch.nn.Module):
     """
-    Particle Mesh Ewald.
+    <Some MACE model> + Particle Mesh Ewald.
 
     Class that adds a long-ranged Coulomb interaction based on Ewald summation to a short-ranged MACE model.
     You need to install 'torch-pme' (https://github.com/lab-cosmo/torch-pme.git) and 'vesin' (pip install .[examples] in 'torch-pme').
@@ -295,7 +290,7 @@ class PME(torch.nn.Module):
     """
 
     def __init__(self, pme_arguments: Optional[Dict] = None, **kwargs):
-        super().__init__()
+        super().__init__(**kwargs)
 
         try:
             import vesin.torch  # used in forward method
@@ -331,20 +326,22 @@ class PME(torch.nn.Module):
 
         interactions = pme_arguments["interactions"]
 
+        self.q_q = None
+        self.q_mu = None
+        self.mu_mu = None
+
         self.use_charges = False
         self.use_dipoles = False
 
         from e3nn import o3
-        def get_readout():
-            return LinearReadoutBlock(
-                o3.Irreps("0e"),
-                o3.Irreps("0e"),
-                kwargs.get("cueq_config", None),
-                kwargs.get("oeq_config", None),
-            )
-            
-        self.interactions = torch.nn.ModuleList()
+
         self.extra_readouts = torch.nn.ModuleList()
+        readout = LinearReadoutBlock(
+            o3.Irreps("0e"),
+            o3.Irreps("0e"),
+            kwargs.get("cueq_config", None),
+            kwargs.get("oeq_config", None),
+        )
 
         for interaction in interactions:
             interaction = str(interaction)
@@ -352,35 +349,58 @@ class PME(torch.nn.Module):
             if interaction == "q-q":
                 from .long_range import ChargeCharge
 
-                self.interactions.append(ChargeCharge(pme_arguments["q-q"]))
-                self.extra_readouts.append(get_readout())
+                self.q_q = ChargeCharge(pme_arguments["q-q"])
+                self.extra_readouts.append(readout.clone())
                 self.use_charges = True
 
             elif interaction == "q-mu":
                 from .long_range import ChargeDipole
 
-                self.interactions.append(ChargeDipole(pme_arguments["q-mu"]))
-                self.extra_readouts.append(get_readout())
+                self.q_mu = ChargeDipole(pme_arguments["q-mu"])
+                self.extra_readouts.append(readout.clone())
                 self.use_charges = True
                 self.use_dipoles = True
 
             elif interaction == "mu-mu":
                 from .long_range import DipoleDipole
 
-                self.interactions.append(DipoleDipole(pme_arguments["mu-mu"]))
-                self.extra_readouts.append(get_readout())
+                self.mu_mu = DipoleDipole(pme_arguments["mu-mu"])
+                self.extra_readouts.append(readout.clone())
                 self.use_dipoles = True
 
             else:
                 raise ValueError(f"Interaction '{interaction}' is not implemented")
-            
-        self.register_buffer("r_max", torch.tensor(kwargs["r_max"], dtype=torch.float64))
 
     def forward(
         self,
-        data: Dict[str, torch.Tensor],  # input data
-        results: Dict[str, torch.Tensor],  # short-range results
-    ) -> Dict[str, torch.Tensor]:
+        data: Dict[str, torch.Tensor],
+        training: bool = False,
+        compute_force: bool = True,
+        compute_virials: bool = False,
+        compute_stress: bool = False,
+        compute_displacement: bool = False,
+        compute_hessian: bool = False,
+        compute_edge_forces: bool = False,
+        compute_atomic_stresses: bool = False,
+        lammps_mliap: bool = False,
+    ) -> Dict[str, Optional[torch.Tensor]]:
+
+        import vesin.torch
+
+        # ---------------------------- #
+        # short-ranged MACE models
+        results = super().forward(
+            data,
+            training=training,
+            compute_force=compute_force,
+            compute_virials=compute_virials,
+            compute_stress=compute_stress,
+            compute_displacement=compute_displacement,
+            compute_hessian=compute_hessian,
+            compute_edge_forces=compute_edge_forces,
+            compute_atomic_stresses=compute_atomic_stresses,
+            lammps_mliap=lammps_mliap,
+        )
 
         # ---------------------------- #
         # long-ranged Coulomb potential
@@ -410,9 +430,6 @@ class PME(torch.nn.Module):
             pbc = data["pbc"][i]
 
             pme_data = {"cell": cell, "positions": positions, "pbc": pbc}
-            
-            charges = torch.empty(0)
-            atomic_dipoles = torch.empty(0)
 
             if self.use_charges:
                 charges = data["oxn"][mask]
@@ -453,8 +470,12 @@ class PME(torch.nn.Module):
             ), "'positions should have attribute 'requires_grad' equal to True"
 
             # compute interatomic distances
-            neighbor_indices, neighbor_distances = get_neighborlist(
-                self.r_max, positions, cell, any(pbc)
+            nl = vesin.torch.NeighborList(cutoff=self.r_max, full_list=False)
+            neighbor_indices, neighbor_distances = nl.compute(
+                points=positions,
+                box=cell,
+                periodic=any(pbc),
+                quantities="Pd",
             )
 
             assert (
@@ -468,12 +489,16 @@ class PME(torch.nn.Module):
             pme_data["neighbor_indices"] = neighbor_indices
 
             # electrostatic potential(s)
-            for interaction,readout in zip(self.interactions,self.extra_readouts):
+            interactions = [self.q_q, self.q_mu, self.mu_mu]
+            n = 0  # counter for the readouts
+            for interaction in interactions:
+                if interaction is None:
+                    continue
 
                 atomic_energies = interaction(pme_data)
 
                 # readout to atomic_energies
-                atomic_energies = readout(atomic_energies[:, None])[:, 0]
+                atomic_energies = self.extra_readouts[n](atomic_energies[:, None])[:, 0]
 
                 # update node_energy
                 results["node_energy"][mask] += atomic_energies
@@ -481,6 +506,8 @@ class PME(torch.nn.Module):
                 # compute total energy
                 total_electrostatic_energy = torch.sum(atomic_energies)
                 results["energy"][i] += total_electrostatic_energy
+
+                n += 1
 
         return results
 
@@ -491,21 +518,9 @@ class MACEPME(PME, ScaleShiftMACE):
     ScaleShiftMACE + Particle Mesh Ewald.
     """
 
+
 @compile_mode("script")
-class EnergyDipoleMACEPME(EnergyDipoleMACE):
+class EnergyDipoleMACEPME(PME, EnergyDipoleMACE):
     """
     EnergyDipoleMACE + Particle Mesh Ewald.
     """
-    
-    def __init__(self,pme_arguments, **kwargs):
-        super().__init__(**kwargs)
-        self.pme_model = PME(pme_arguments,**kwargs)
-        
-    def forward(
-        self,
-        data: Dict[str, torch.Tensor],
-        options: Optional[Dict[str, bool]] = {},
-    ) -> Dict[str, torch.Tensor]:
-        results = self.mace_model(data,options)
-        results = self.pme_model(data,results)
-        return results

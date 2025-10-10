@@ -1,18 +1,10 @@
 import torch
-from typing import Dict, Optional, Tuple
-import vesin.torch
-
-@torch.jit.ignore
-def get_neighborlist(
-    r_max: float, positions: torch.Tensor, cell: torch.Tensor, periodic: torch.Tensor
-)->Tuple[torch.Tensor,torch.Tensor]:
-    nl = vesin.torch.NeighborList(cutoff=r_max, full_list=False)
-    return nl.compute(points=positions, box=cell, periodic=bool(periodic), quantities="Pd")
+from typing import Dict, Optional
 
 
 class LongRange(torch.nn.Module):
-    def __init__(self, pme_arguments: Optional[Dict], **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, pme_arguments: Optional[Dict]):
+
         # sanity checks
         if not isinstance(pme_arguments, dict):
             raise TypeError("'pme_arguments' must be a dictionary.")
@@ -23,7 +15,7 @@ class LongRange(torch.nn.Module):
 
 class ChargeCharge(LongRange):
     def __init__(self, pme_arguments: Optional[Dict] = None, **kwargs):
-        super().__init__(pme_arguments, **kwargs)
+        super().__init__(pme_arguments)
         try:
             from torchpme import EwaldCalculator
         except ImportError as exc:

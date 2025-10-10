@@ -266,12 +266,10 @@ def generate_pseudolabels_for_configs(
             # Run model inference with computation of all properties
             out = model(
                 batch_dict,
-                {
-                    "training": False,
-                    "compute_force": True,
-                    "compute_virials": True,
-                    "compute_stress": True,
-                },
+                training=False,
+                compute_force=True,
+                compute_virials=True,
+                compute_stress=True,
             )
 
             # Process each configuration in the batch
