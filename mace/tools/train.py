@@ -420,10 +420,12 @@ def take_step(
         optimizer.zero_grad(set_to_none=True)
         output = model(
             batch_dict,
-            training=True,
-            compute_force=output_args["forces"],
-            compute_virials=output_args["virials"],
-            compute_stress=output_args["stress"],
+            {
+                "training": True,
+                "compute_force": output_args["forces"],
+                "compute_virials": output_args["virials"],
+                "compute_stress": output_args["stress"],
+            },
         )
         loss = loss_fn(pred=output, ref=batch)
         loss.backward()
@@ -494,10 +496,12 @@ def take_step_lbfgs(
             batch_dict = batch.to_dict()
             output = model(
                 batch_dict,
-                training=True,
-                compute_force=output_args["forces"],
-                compute_virials=output_args["virials"],
-                compute_stress=output_args["stress"],
+                {
+                    "training": True,
+                    "compute_force": output_args["forces"],
+                    "compute_virials": output_args["virials"],
+                    "compute_stress": output_args["stress"],
+                },
             )
             batch_loss = loss_fn(pred=output, ref=batch)
             batch_loss = batch_loss * (batch.num_graphs / total_sample_count)
@@ -560,10 +564,12 @@ def evaluate(
         batch_dict = batch.to_dict()
         output = model(
             batch_dict,
-            training=False,
-            compute_force=output_args["forces"],
-            compute_virials=output_args["virials"],
-            compute_stress=output_args["stress"],
+            {
+                "training": False,
+                "compute_force": output_args["forces"],
+                "compute_virials": output_args["virials"],
+                "compute_stress": output_args["stress"],
+            },
         )
         avg_loss, aux = metrics(batch, output)
 
@@ -686,7 +692,6 @@ class MACELoss(Metric):
         return to_numpy(delta)
 
     def compute(self):
-
         class NoneMultiply:
             def __mul__(self, other):
                 return NoneMultiply()

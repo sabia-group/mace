@@ -86,7 +86,7 @@ def do_optimization_step(
     model.train()
     optimizer.train()
     optimizer.zero_grad()
-    output = model(batch, training=True, compute_force=False)
+    output = model(batch, {"training":True, "compute_force":False})
     loss = output["energy"].mean()
     loss.backward()
     optimizer.step()

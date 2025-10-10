@@ -434,10 +434,12 @@ class MACECalculator(Calculator):
             batch = self._clone_batch(batch_base)
             out = model(
                 batch.to_dict(),
-                compute_stress=compute_stress,
-                training=self.use_compile,
-                compute_edge_forces=self.compute_atomic_stresses,
-                compute_atomic_stresses=self.compute_atomic_stresses,
+                {
+                    "compute_stress": compute_stress,
+                    "training": self.use_compile,
+                    "compute_edge_forces": self.compute_atomic_stresses,
+                    "compute_atomic_stresses": self.compute_atomic_stresses,
+                },
             )
             if self.model_type in ["MACE", "EnergyDipoleMACE"]:
                 ret_tensors["energies"][i] = out["energy"].detach()
@@ -564,8 +566,7 @@ class MACECalculator(Calculator):
         outputs = [
             model(
                 self._clone_batch(batch).to_dict(),
-                compute_dielectric_derivatives=True,
-                training=self.use_compile,
+                {"compute_dielectric_derivatives": True, "training": self.use_compile},
             )
             for model in self.models
         ]
@@ -597,9 +598,11 @@ class MACECalculator(Calculator):
         hessians = [
             model(
                 self._clone_batch(batch).to_dict(),
-                compute_hessian=True,
-                compute_stress=False,
-                training=self.use_compile,
+                {
+                    "compute_hessian": True,
+                    "compute_stress": False,
+                    "training": self.use_compile,
+                },
             )["hessian"]
             for model in self.models
         ]
@@ -631,9 +634,9 @@ class MACECalculator(Calculator):
         l_max = irreps_out.lmax
         num_invariant_features = irreps_out.dim // (l_max + 1) ** 2
         per_layer_features = [irreps_out.dim for _ in range(num_interactions)]
-        per_layer_features[-1] = (
-            num_invariant_features  # Equivariant features not created for the last layer
-        )
+        per_layer_features[
+            -1
+        ] = num_invariant_features  # Equivariant features not created for the last layer
 
         if invariants_only:
             descriptors = [

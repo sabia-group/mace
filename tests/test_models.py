@@ -122,7 +122,7 @@ def test_mace():
         drop_last=False,
     )
     batch = next(iter(data_loader))
-    output1 = model(batch.to_dict(), training=True)
+    output1 = model(batch.to_dict(), {"training":True})
     output2 = model_compiled(batch.to_dict(), training=True)
     assert torch.allclose(output1["energy"][0], output2["energy"][0])
     assert torch.allclose(output2["energy"][0], output2["energy"][1])
@@ -168,7 +168,7 @@ def test_dipole_mace():
     batch = next(iter(data_loader))
     output = model(
         batch.to_dict(),
-        training=True,
+        {"training":True},
     )
     # sanity check of dipoles being the right shape
     assert output["dipole"][0].unsqueeze(0).shape == atomic_data.dipole.shape
@@ -235,7 +235,7 @@ def test_dipole_polar_mace():
     batch = next(iter(data_loader))
     output = model(
         batch,
-        training=True,
+        {"training":True},
     )
     # sanity check of dipoles being the right shape
     assert output["dipole"][0].unsqueeze(0).shape == atomic_data.dipole.shape
@@ -295,7 +295,7 @@ def test_energy_dipole_mace():
     batch = next(iter(data_loader))
     output = model(
         batch,
-        training=True,
+        {"training":True},
     )
     # sanity check of dipoles being the right shape
     assert output["dipole"][0].unsqueeze(0).shape == atomic_data.dipole.shape
@@ -379,8 +379,8 @@ def test_mace_multi_reference():
         drop_last=False,
     )
     batch = next(iter(data_loader))
-    output1 = model(batch.to_dict(), training=True)
-    output2 = model_compiled(batch.to_dict(), training=True)
+    output1 = model(batch.to_dict(), {"training":True})
+    output2 = model_compiled(batch.to_dict(), {"training":True})
     assert torch.allclose(output1["energy"][0], output2["energy"][0])
     assert output2["energy"].shape[0] == 2
 
@@ -455,10 +455,12 @@ def test_atomic_virials_stresses():
     # Run the model with compute_atomic_stresses=True
     output = model(
         batch_dict,
-        compute_force=True,
-        compute_virials=True,
-        compute_stress=True,
-        compute_atomic_stresses=True,
+        {
+            "compute_force":True,
+            "compute_virials":True,
+            "compute_stress":True,
+            "compute_atomic_stresses":True
+        }
     )
 
     # Get total virials/stress and atomic virials/stresses

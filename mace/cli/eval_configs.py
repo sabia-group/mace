@@ -124,7 +124,7 @@ def get_model_output(
         # Only add `compute_bec` if it is requested
         # We check if the model is MACELES at the start of the run function
         forward_args["compute_bec"] = compute_bec
-    return model(batch, **forward_args)
+    return model(batch, forward_args)
 
 
 def main() -> None:
@@ -224,9 +224,9 @@ def run(args: argparse.Namespace) -> None:
             per_layer_features = [
                 irreps_out.dim for _ in range(int(model.num_interactions))
             ]
-            per_layer_features[-1] = (
-                num_invariant_features  # Equivariant features not created for the last layer
-            )
+            per_layer_features[
+                -1
+            ] = num_invariant_features  # Equivariant features not created for the last layer
 
             descriptors = output["node_feats"]
 

@@ -266,16 +266,20 @@ class MACE(torch.nn.Module):
     def forward(
         self,
         data: Dict[str, torch.Tensor],
-        training: bool = False,
-        compute_force: bool = True,
-        compute_virials: bool = False,
-        compute_stress: bool = False,
-        compute_displacement: bool = False,
-        compute_hessian: bool = False,
-        compute_edge_forces: bool = False,
-        compute_atomic_stresses: bool = False,
-        lammps_mliap: bool = False,
+        options: Optional[Dict[str, bool]] = {},
     ) -> Dict[str, Optional[torch.Tensor]]:
+
+        # Pull options with defaults
+        training = options.get("training", False)
+        compute_force = options.get("compute_force", True)
+        compute_virials = options.get("compute_virials", False)
+        compute_stress = options.get("compute_stress", False)
+        compute_displacement = options.get("compute_displacement", False)
+        compute_hessian = options.get("compute_hessian", False)
+        compute_edge_forces = options.get("compute_edge_forces", False)
+        compute_atomic_stresses = options.get("compute_atomic_stresses", False)
+        lammps_mliap = options.get("lammps_mliap", False)
+
         # Setup
         ctx = prepare_graph(
             data,
@@ -445,16 +449,20 @@ class ScaleShiftMACE(MACE):
     def forward(
         self,
         data: Dict[str, torch.Tensor],
-        training: bool = False,
-        compute_force: bool = True,
-        compute_virials: bool = False,
-        compute_stress: bool = False,
-        compute_displacement: bool = False,
-        compute_hessian: bool = False,
-        compute_edge_forces: bool = False,
-        compute_atomic_stresses: bool = False,
-        lammps_mliap: bool = False,
+        options: Optional[Dict[str, bool]] = {},
     ) -> Dict[str, Optional[torch.Tensor]]:
+
+        # Pull options with defaults
+        training = options.get("training", False)
+        compute_force = options.get("compute_force", True)
+        compute_virials = options.get("compute_virials", False)
+        compute_stress = options.get("compute_stress", False)
+        compute_displacement = options.get("compute_displacement", False)
+        compute_hessian = options.get("compute_hessian", False)
+        compute_edge_forces = options.get("compute_edge_forces", False)
+        compute_atomic_stresses = options.get("compute_atomic_stresses", False)
+        lammps_mliap = options.get("lammps_mliap", False)
+
         # Setup
         ctx = prepare_graph(
             data,
@@ -763,14 +771,18 @@ class AtomicDipolesMACE(torch.nn.Module):
     def forward(
         self,
         data: Dict[str, torch.Tensor],
-        training: bool = False,  # pylint: disable=W0613
-        compute_force: bool = False,
-        compute_virials: bool = False,
-        compute_stress: bool = False,
-        compute_displacement: bool = False,
-        compute_edge_forces: bool = False,  # pylint: disable=W0613
-        compute_atomic_stresses: bool = False,  # pylint: disable=W0613
+        options: Optional[Dict[str, bool]] = {},
     ) -> Dict[str, Optional[torch.Tensor]]:
+
+        # Pull options with defaults
+        training = options.get("training", False)
+        compute_force = options.get("compute_force", False)
+        compute_virials = options.get("compute_virials", False)
+        compute_stress = options.get("compute_stress", False)
+        compute_displacement = options.get("compute_displacement", False)
+        compute_edge_forces = options.get("compute_edge_forces", False)
+        compute_atomic_stresses = options.get("compute_atomic_stresses", False)
+
         assert compute_force is False
         assert compute_virials is False
         assert compute_stress is False
@@ -1027,15 +1039,21 @@ class AtomicDielectricMACE(torch.nn.Module):
     def forward(
         self,
         data: Dict[str, torch.Tensor],
-        training: bool = False,  # pylint: disable=W0613
-        compute_force: bool = False,
-        compute_virials: bool = False,
-        compute_stress: bool = False,
-        compute_displacement: bool = False,
-        compute_dielectric_derivatives: bool = False,  # no training on derivatives
-        compute_edge_forces: bool = False,  # pylint: disable=W0613
-        compute_atomic_stresses: bool = False,  # pylint: disable=W0613
+        options: Optional[Dict[str, bool]] = {},
     ) -> Dict[str, Optional[torch.Tensor]]:
+
+        # Pull options with defaults
+        training = options.get("training", False)
+        compute_force = options.get("compute_force", False)
+        compute_virials = options.get("compute_virials", False)
+        compute_stress = options.get("compute_stress", False)
+        compute_displacement = options.get("compute_displacement", False)
+        compute_dielectric_derivatives = options.get(
+            "compute_dielectric_derivatives", False
+        )
+        compute_edge_forces = options.get("compute_edge_forces", False)
+        compute_atomic_stresses = options.get("compute_atomic_stresses", False)
+
         assert compute_force is False
         assert compute_virials is False
         assert compute_stress is False
@@ -1199,8 +1217,9 @@ class EnergyDipoleMACE(torch.nn.Module):
         cueq_config: Optional[Dict[str, Any]] = None,  # pylint: disable=unused-argument
         oeq_config: Optional[Dict[str, Any]] = None,  # pylint: disable=unused-argument
         edge_irreps: Optional[o3.Irreps] = None,  # pylint: disable=unused-argument
+        **kwargs,  # allows inheritance
     ):
-        super().__init__()
+        super().__init__(**kwargs)
         self.register_buffer(
             "atomic_numbers", torch.tensor(atomic_numbers, dtype=torch.int64)
         )
@@ -1321,15 +1340,17 @@ class EnergyDipoleMACE(torch.nn.Module):
     def forward(
         self,
         data: Dict[str, torch.Tensor],
-        training: bool = False,
-        compute_force: bool = True,
-        compute_virials: bool = False,
-        compute_stress: bool = False,
-        compute_displacement: bool = False,
-        compute_edge_forces: bool = False,  # pylint: disable=W0613
-        compute_atomic_stresses: bool = False,  # pylint: disable=W0613
+        options: Optional[Dict[str, bool]] = {},
     ) -> Dict[str, Optional[torch.Tensor]]:
         # Setup
+
+        # Pull options with defaults
+        training = options.get("training", False)
+        compute_force = options.get("compute_force", True)
+        compute_virials = options.get("compute_virials", False)
+        compute_stress = options.get("compute_stress", False)
+        compute_displacement = options.get("compute_displacement", False)
+
         data["node_attrs"].requires_grad_(True)
         data["positions"].requires_grad_(True)
         num_graphs = data["ptr"].numel() - 1

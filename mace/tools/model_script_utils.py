@@ -115,9 +115,9 @@ def configure_model(
             args.model == "ScaleShiftMACE"
             or model_foundation.__class__.__name__ == "ScaleShiftMACE"
         ):
-            model_config_foundation["atomic_inter_shift"] = (
-                _determine_atomic_inter_shift(args.mean, heads)
-            )
+            model_config_foundation[
+                "atomic_inter_shift"
+            ] = _determine_atomic_inter_shift(args.mean, heads)
         else:
             model_config_foundation["atomic_inter_shift"] = [0.0] * len(heads)
         model_config_foundation["atomic_inter_scale"] = [1.0] * len(heads)

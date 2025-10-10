@@ -40,11 +40,13 @@ class LAMMPS_MACE(torch.nn.Module):
         data["head"] = self.head
         out = self.model(
             data,
-            training=False,
-            compute_force=False,
-            compute_virials=False,
-            compute_stress=False,
-            compute_displacement=compute_displacement,
+            {
+                "training": False,
+                "compute_force": False,
+                "compute_virials": False,
+                "compute_stress": False,
+                "compute_displacement": compute_displacement,
+            },
         )
         node_energy = out["node_energy"]
         if node_energy is None:
