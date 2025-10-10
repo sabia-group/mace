@@ -1343,13 +1343,16 @@ class EnergyDipoleMACE(torch.nn.Module):
         options: Optional[Dict[str, bool]] = {},
     ) -> Dict[str, Optional[torch.Tensor]]:
         # Setup
+        _options = dict()
+        if options is not None:
+            _options = options
 
         # Pull options with defaults
-        training = options.get("training", False)
-        compute_force = options.get("compute_force", True)
-        compute_virials = options.get("compute_virials", False)
-        compute_stress = options.get("compute_stress", False)
-        compute_displacement = options.get("compute_displacement", False)
+        training = _options.get("training", False)
+        compute_force = _options.get("compute_force", True)
+        compute_virials = _options.get("compute_virials", False)
+        compute_stress = _options.get("compute_stress", False)
+        compute_displacement = _options.get("compute_displacement", False)
 
         data["node_attrs"].requires_grad_(True)
         data["positions"].requires_grad_(True)
