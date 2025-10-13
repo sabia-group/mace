@@ -362,9 +362,7 @@ class PME(torch.nn.Module):
                 raise ValueError(f"Interaction '{interaction}' is not implemented")
 
         from .long_range import NeighborModule
-
         self.neighbor = NeighborModule(pme_arguments["r_max"])
-
         self.register_buffer(
             "r_max", torch.tensor(pme_arguments["r_max"], dtype=torch.float64)
         )
@@ -447,7 +445,7 @@ class PME(torch.nn.Module):
                 positions.requires_grad
             ), "'positions should have attribute 'requires_grad' equal to True"
 
-            neighbor_indices, neighbor_distances = self.neighbor(
+            neighbor_indices, neighbor_distances, neighbor_vectors = self.neighbor(
                 positions, cell, bool(any(pbc))
             )
 
@@ -473,8 +471,9 @@ class PME(torch.nn.Module):
                 neighbor_distances.dtype == positions.dtype
             ), f"'neighbor_distances' should have the same dtype as 'positions' but they have {neighbor_distances.dtype} and {positions.dtype} respectively"
 
-            pme_data["neighbor_distances"] = neighbor_distances
             pme_data["neighbor_indices"] = neighbor_indices
+            pme_data["neighbor_distances"] = neighbor_distances
+            pme_data["neighbor_vectors"] = neighbor_vectors
 
             # electrostatic potential(s)
             for interaction, readout in zip(self.interactions, self.extra_readouts):

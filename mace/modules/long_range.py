@@ -16,7 +16,7 @@ class NeighborModule(torch.nn.Module):
         periodic: bool = True,
         full_list: bool = False,  # include symmetric pairs
         sort: bool = True,  # sort neighbors by distance
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Compute neighbor list indices and distances using PyTorch only.
 
@@ -56,20 +56,24 @@ class NeighborModule(torch.nn.Module):
         indices = mask.nonzero()  # [num_pairs,2]
         neighbor_indices = indices
         neighbor_distances = distances[indices[:, 0], indices[:, 1]]
+        neighbor_vectors = disp[indices[:, 0], indices[:, 1]]
 
         # For half list, remove symmetric duplicates: keep only i < j
         if not full_list:
             keep_mask = neighbor_indices[:, 0] < neighbor_indices[:, 1]
             neighbor_indices = neighbor_indices[keep_mask]
             neighbor_distances = neighbor_distances[keep_mask]
+            neighbor_vectors = neighbor_vectors[keep_mask]
 
         # Sort neighbors by distance if requested
         if sort and neighbor_distances.numel() > 0:
             sorted_distances, sort_idx = torch.sort(neighbor_distances)
-            neighbor_indices = neighbor_indices[sort_idx]
             neighbor_distances = sorted_distances
+            neighbor_indices = neighbor_indices[sort_idx]
+            neighbor_vectors = neighbor_vectors[sort_idx]
+            assert torch.allclose(torch.norm(neighbor_vectors,dim=1),neighbor_distances), "coding error"
 
-        return neighbor_indices, neighbor_distances
+        return neighbor_indices, neighbor_distances, neighbor_vectors
 
 
 class LongRange(torch.nn.Module):
@@ -141,4 +145,44 @@ class ChargeDipole(LongRange):
 class DipoleDipole(LongRange):
     def __init__(self, pme_arguments: Optional[Dict] = None, **kwargs):
         super().__init__(pme_arguments)
-        raise ValueError("'DipoleDipole' not implemented yet.")
+        try:
+            from torchpme import CalculatorDipole
+        except ImportError as exc:
+            raise ImportError(
+                "Cannot import 'CalculatorDipole'. Please install the 'torch-pme' library from https://github.com/lab-cosmo/torch-pme.git."
+            ) from exc
+
+        try:
+            from torchpme import PotentialDipole
+        except ImportError as exc:
+            raise ImportError(
+                "Cannot import 'PotentialDipole'. Please install the 'torch-pme' library from https://github.com/lab-cosmo/torch-pme.git."
+            ) from exc
+
+        # set up PME calculator
+        potential = PotentialDipole(
+            smearing=pme_arguments.get("smearing", None),
+            exclusion_radius=pme_arguments.get("exclusion_radius", None),
+            exclusion_degree=pme_arguments.get("exclusion_radius", 1),
+        )
+
+        self.pme = CalculatorDipole(
+            potential=potential,
+            lr_wavelength=pme_arguments.get("lr_wavelength", None),
+            full_neighbor_list=False,
+            prefactor=pme_arguments.get("prefactor", 1.0),
+        )
+
+    def forward(self, data: Dict[str, torch.Tensor]) -> torch.Tensor:
+
+        # electrostatic potential
+        pot = self.pme(
+            data["atomic_dipoles"],  # [Natoms,Nchannels = 1]
+            data["cell"],  # [3,3]
+            data["positions"],  # [Natoms,3]
+            data["neighbor_indices"],  # [num_neighbor_i,2]
+            data["neighbor_vectors"],  # [num_neighbor_i,]
+        )
+
+        # electrostatic (atomic) energy
+        return torch.einsum("ij,ij->i",pot, data["atomic_dipoles"])

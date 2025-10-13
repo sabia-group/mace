@@ -67,7 +67,7 @@ def main():
     # Build neighbor list
     print(f"Building neighbor list with cutoff {args.cutoff} Å...")
     nl = NeighborModule(args.cutoff)
-    neighbor_indices, neighbor_distances = nl(
+    neighbor_indices, neighbor_distances, neighbor_vectors = nl(
         positions=positions,
         box=cell,
         periodic=True,
