@@ -1321,7 +1321,7 @@ class EnergyDipoleMACE(torch.nn.Module):
 
         self.pme = None
         if pme_arguments is not None:
-            from .extensions import PME
+            from .long_range import PME
 
             self.pme = PME(
                 pme_arguments,
