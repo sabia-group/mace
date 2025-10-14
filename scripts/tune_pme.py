@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import json
 from ase.io import read
-from mace.modules.long_range import NeighborModule
+from mace.data.neighborhood import NeighborModule
 
 
 dtype = torch.float64

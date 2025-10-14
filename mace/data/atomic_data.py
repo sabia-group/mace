@@ -16,8 +16,9 @@ from mace.tools import (
     torch_geometric,
     voigt_to_matrix,
 )
+from mace.data.neighborhood import NeighborModule
 
-from .neighborhood import get_neighborhood
+
 from .utils import Configuration
 
 
@@ -158,12 +159,15 @@ class AtomicData(torch_geometric.data.Data):
     ) -> "AtomicData":
         if heads is None:
             heads = ["Default"]
-        edge_index, shifts, unit_shifts, cell = get_neighborhood(
-            positions=config.positions,
-            cutoff=cutoff,
-            pbc=deepcopy(config.pbc),
-            cell=deepcopy(config.cell),
-        )
+
+        pos = torch.from_numpy(config.positions)
+        cell = torch.from_numpy(config.cell)
+
+        nl = NeighborModule(cutoff)
+        info = nl(pos, cell, deepcopy(config.pbc), True, True)
+        edge_index = info["edge_index"]
+        shifts = info["shifts"]
+        unit_shifts = info["unit_shifts"]
 
         indices = atomic_numbers_to_indices(config.atomic_numbers, z_table=z_table)
         one_hot = to_one_hot(

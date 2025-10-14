@@ -1,82 +1,8 @@
 import torch
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional
 from e3nn.util.jit import compile_mode
 from mace.modules.blocks import LinearReadoutBlock
-
-
-@compile_mode("script")
-class NeighborModule(torch.nn.Module):
-    def __init__(self, r_max: float):
-        super().__init__()
-        self.r_max = r_max
-
-    def forward(
-        self,
-        positions: torch.Tensor,
-        box: torch.Tensor,
-        periodic: bool = True,
-        full_list: bool = False,  # include symmetric pairs
-        sort: bool = True,  # sort neighbors by distance
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Compute neighbor list indices and distances using PyTorch only.
-
-        Args:
-            positions: [N,3] tensor of atomic positions
-            box: [3,3] tensor of simulation cell vectors
-            periodic: whether to apply periodic boundary conditions
-            full_list: if True, include both (i,j) and (j,i) pairs
-            sort: if True, sort neighbors by distance (ascending)
-
-        Returns:
-            neighbor_indices: LongTensor [num_pairs,2]
-            neighbor_distances: Float64Tensor [num_pairs]
-        """
-        N = positions.size(0)
-
-        # Compute displacement vectors
-        disp = positions.view(N, 1, 3) - positions.view(1, N, 3)
-        if periodic:
-            box_inv = torch.inverse(box)
-            frac_disp = torch.matmul(disp, box_inv)
-            frac_disp = frac_disp - frac_disp.round()
-            disp = torch.matmul(frac_disp, box)
-
-        # Compute pairwise distances
-        distances = torch.norm(disp, dim=2)
-
-        # Mask out self-pairs
-        mask = torch.ones_like(distances, dtype=torch.bool)
-        mask.fill_diagonal_(0)
-
-        # Mask out pairs beyond cutoff if not using full list
-        # if not full_list:
-        mask = mask & (distances <= self.r_max)
-
-        # TorchScript-compatible nonzero
-        indices = mask.nonzero()  # [num_pairs,2]
-        neighbor_indices = indices
-        neighbor_distances = distances[indices[:, 0], indices[:, 1]]
-        neighbor_vectors = disp[indices[:, 0], indices[:, 1]]
-
-        # For half list, remove symmetric duplicates: keep only i < j
-        if not full_list:
-            keep_mask = neighbor_indices[:, 0] < neighbor_indices[:, 1]
-            neighbor_indices = neighbor_indices[keep_mask]
-            neighbor_distances = neighbor_distances[keep_mask]
-            neighbor_vectors = neighbor_vectors[keep_mask]
-
-        # Sort neighbors by distance if requested
-        if sort and neighbor_distances.numel() > 0:
-            sorted_distances, sort_idx = torch.sort(neighbor_distances)
-            neighbor_distances = sorted_distances
-            neighbor_indices = neighbor_indices[sort_idx]
-            neighbor_vectors = neighbor_vectors[sort_idx]
-            assert torch.allclose(
-                torch.norm(neighbor_vectors, dim=1), neighbor_distances
-            ), "coding error"
-
-        return neighbor_indices, neighbor_distances, neighbor_vectors
+from mace.data.neighborhood import NeighborModule
 
 
 @compile_mode("script")
@@ -170,8 +96,6 @@ class PME(torch.nn.Module):
             else:
                 raise ValueError(f"Interaction '{interaction}' is not implemented")
 
-        from .long_range import NeighborModule
-
         self.neighbor = NeighborModule(pme_arguments["r_max"])
         self.register_buffer(
             "r_max", torch.tensor(pme_arguments["r_max"], dtype=torch.float64)
@@ -255,9 +179,7 @@ class PME(torch.nn.Module):
                 positions.requires_grad
             ), "'positions should have attribute 'requires_grad' equal to True"
 
-            neighbor_indices, neighbor_distances, neighbor_vectors = self.neighbor(
-                positions, cell, bool(any(pbc))
-            )
+            info = self.neighbor(positions, cell, bool(any(pbc)))
 
             # import vesin.torch
             # nl = vesin.torch.NeighborList(cutoff=self.r_max, full_list=False)
@@ -274,16 +196,16 @@ class PME(torch.nn.Module):
             # assert torch.allclose(a,neighbor_indices)
             # assert torch.allclose(b,neighbor_distances)
 
+            assert info[
+                "distances"
+            ].requires_grad, "'neighbor_distances' should have attribute 'requires_grad' equal to True"
             assert (
-                neighbor_distances.requires_grad
-            ), "'neighbor_distances' should have attribute 'requires_grad' equal to True"
-            assert (
-                neighbor_distances.dtype == positions.dtype
-            ), f"'neighbor_distances' should have the same dtype as 'positions' but they have {neighbor_distances.dtype} and {positions.dtype} respectively"
+                info["distances"].dtype == positions.dtype
+            ), f"'neighbor_distances' should have the same dtype as 'positions' but they have {info['distances'].dtype} and {positions.dtype} respectively"
 
-            pme_data["neighbor_indices"] = neighbor_indices
-            pme_data["neighbor_distances"] = neighbor_distances
-            pme_data["neighbor_vectors"] = neighbor_vectors
+            pme_data["neighbor_indices"] = info["edge_index"].T
+            pme_data["neighbor_distances"] = info["distances"]
+            pme_data["neighbor_vectors"] = info["vectors"]
 
             # electrostatic potential(s)
             for interaction, readout in zip(self.interactions, self.extra_readouts):
