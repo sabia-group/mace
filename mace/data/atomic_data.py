@@ -22,7 +22,9 @@ from .utils import Configuration
 
 
 class AtomicData(torch_geometric.data.Data):
-    num_graphs: torch.Tensor
+    # num_graphs: torch.Tensor
+    num_nodes: int
+    n_edges: int
     batch: torch.Tensor
     edge_index: torch.Tensor
     node_attrs: torch.Tensor
@@ -86,11 +88,12 @@ class AtomicData(torch_geometric.data.Data):
     ):
         # Check shapes
         num_nodes = node_attrs.shape[0]
+        n_edges = edge_index.shape[1]
 
         assert edge_index.shape[0] == 2 and len(edge_index.shape) == 2
         assert positions.shape == (num_nodes, 3)
-        assert shifts.shape[1] == 3
-        assert unit_shifts.shape[1] == 3
+        assert shifts.shape == (n_edges, 3)
+        assert unit_shifts.shape == (n_edges, 3)
         assert len(node_attrs.shape) == 2
         assert weight is None or len(weight.shape) == 0
         assert head is None or len(head.shape) == 0
@@ -117,6 +120,7 @@ class AtomicData(torch_geometric.data.Data):
         # Aggregate data
         data = {
             "num_nodes": num_nodes,
+            "n_edges": n_edges,
             "edge_index": edge_index,
             "positions": positions,
             "shifts": shifts,

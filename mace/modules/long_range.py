@@ -2,7 +2,17 @@ import torch
 from typing import Dict, Optional
 from e3nn.util.jit import compile_mode
 from mace.modules.blocks import LinearReadoutBlock
-from mace.data.neighborhood import NeighborModule
+from mace.modules.utils import get_edge_vectors_and_lengths
+
+# ToDo:
+# - mask out atoms with zero charge/dipole to speed up the calculations
+# - reimplement DipoleDpole usign InversePowerLaw
+# - implement ChargeDipole
+# - autodiff ChargeDipole and check that it is the same as DipoleDipole
+
+
+def full2half(edge_index: torch.Tensor) -> torch.Tensor:
+    return edge_index[0, :] < edge_index[1, :]
 
 
 @compile_mode("script")
@@ -96,7 +106,6 @@ class PME(torch.nn.Module):
             else:
                 raise ValueError(f"Interaction '{interaction}' is not implemented")
 
-        self.neighbor = NeighborModule(pme_arguments["r_max"])
         self.register_buffer(
             "r_max", torch.tensor(pme_arguments["r_max"], dtype=torch.float64)
         )
@@ -123,6 +132,8 @@ class PME(torch.nn.Module):
         }
 
         # loop over structures (batching is not supported yet in torch-pme)
+        prev_edge = 0
+        prev_Natoms = 0
         for i in unique_batches:
 
             # Create a mask for the i-th configuration
@@ -130,12 +141,25 @@ class PME(torch.nn.Module):
 
             # number of atoms
             Natoms = int(sum(mask))
+            n_edges = data["n_edges"][i]
 
             # structure properties
             cell = data["cell"][i * 3 : (i + 1) * 3, :]
             positions = data["positions"][mask, :]
             pbc = data["pbc"][i]
+            edge_index = data["edge_index"][:, prev_edge:n_edges]
+            shifts = data["shifts"][prev_edge:n_edges, :]
 
+            # graph
+            edge_mask = full2half(edge_index)
+            edge_index = edge_index[:, edge_mask] - prev_Natoms
+            shifts = shifts[edge_mask, :]
+
+            # counters
+            prev_edge += data["n_edges"][i]
+            prev_Natoms += Natoms
+
+            # input data for PME
             pme_data = {"cell": cell, "positions": positions, "pbc": pbc}
 
             charges = torch.empty(0)
@@ -179,33 +203,22 @@ class PME(torch.nn.Module):
                 positions.requires_grad
             ), "'positions should have attribute 'requires_grad' equal to True"
 
-            info = self.neighbor(positions, cell, bool(any(pbc)))
+            vectors, distances = get_edge_vectors_and_lengths(
+                positions=positions,
+                edge_index=edge_index,
+                shifts=shifts,
+            )
 
-            # import vesin.torch
-            # nl = vesin.torch.NeighborList(cutoff=self.r_max, full_list=False)
-            # a, b = nl.compute(
-            #     points=positions,
-            #     box=cell,
-            #     periodic=any(pbc),
-            #     quantities="Pd",
-            # )
-
-            # b, ii = torch.sort(b)
-            # a=a[ii]
-
-            # assert torch.allclose(a,neighbor_indices)
-            # assert torch.allclose(b,neighbor_distances)
-
-            assert info[
-                "distances"
-            ].requires_grad, "'neighbor_distances' should have attribute 'requires_grad' equal to True"
             assert (
-                info["distances"].dtype == positions.dtype
-            ), f"'neighbor_distances' should have the same dtype as 'positions' but they have {info['distances'].dtype} and {positions.dtype} respectively"
+                distances.requires_grad
+            ), "'neighbor_distances' should have attribute 'requires_grad' equal to True"
+            assert (
+                distances.dtype == positions.dtype
+            ), f"'neighbor_distances' should have the same dtype as 'positions' but they have {distances} and {positions.dtype} respectively"
 
-            pme_data["neighbor_indices"] = info["edge_index"].T
-            pme_data["neighbor_distances"] = info["distances"]
-            pme_data["neighbor_vectors"] = info["vectors"]
+            pme_data["neighbor_indices"] = edge_index.T
+            pme_data["neighbor_distances"] = distances[:, 0]
+            pme_data["neighbor_vectors"] = vectors
 
             # electrostatic potential(s)
             for interaction, readout in zip(self.interactions, self.extra_readouts):
