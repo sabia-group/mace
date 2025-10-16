@@ -35,7 +35,7 @@ def test_inference(
 
         def func():
             torch.cuda.synchronize()
-            model(batch, {"training":compile_mode is not None, "compute_force":True})
+            model(batch, training=compile_mode is not None, compute_force=True)
 
         torch.cuda.empty_cache()
         benchmark(func)

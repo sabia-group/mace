@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import json
 from ase.io import read
-from mace.data.neighborhood import NeighborModule
+import vesin.torch
 
 
 dtype = torch.float64
@@ -66,11 +66,12 @@ def main():
 
     # Build neighbor list
     print(f"Building neighbor list with cutoff {args.cutoff} Å...")
-    nl = NeighborModule(args.cutoff)
-    neighbor_indices, neighbor_distances, neighbor_vectors = nl(
-        positions=positions,
+    nl = vesin.torch.NeighborList(cutoff=args.cutoff, full_list=False)
+    neighbor_indices, neighbor_distances = nl.compute(
+        points=positions,
         box=cell,
         periodic=True,
+        quantities="Pd",
     )
     print(f"Neighbor list computed. Found neighbors for each atom.")
 
