@@ -53,8 +53,8 @@ class PME(torch.nn.Module):
                 "'pme_arguments' must be a dictionary, JSON formatted string or a JSON file."
             )
 
-        if "r_max" not in pme_arguments:
-            pme_arguments["r_max"] = kwargs["r_max"]
+        # if "r_max" not in pme_arguments:
+        pme_arguments["exclusion_radius"] = kwargs["r_max"]
 
         interactions = pme_arguments["interactions"]
 
@@ -101,10 +101,6 @@ class PME(torch.nn.Module):
 
             else:
                 raise ValueError(f"Interaction '{interaction}' is not implemented")
-
-        self.register_buffer(
-            "r_max", torch.tensor(pme_arguments["r_max"], dtype=torch.float64)
-        )
 
     def forward(
         self,
@@ -266,7 +262,7 @@ class ChargeCharge(LongRange):
         potential = CoulombPotential(
             smearing=pme_arguments.get("smearing", None),
             exclusion_radius=pme_arguments.get("exclusion_radius", None),
-            exclusion_degree=pme_arguments.get("exclusion_radius", 1),
+            exclusion_degree=pme_arguments.get("exclusion_degree", 1),
         )
 
         self.pme = EwaldCalculator(
@@ -321,7 +317,7 @@ class DipoleDipole(LongRange):
         potential = PotentialDipole(
             smearing=pme_arguments.get("smearing", None),
             exclusion_radius=pme_arguments.get("exclusion_radius", None),
-            exclusion_degree=pme_arguments.get("exclusion_radius", 1),
+            exclusion_degree=pme_arguments.get("exclusion_degree", 1),
         )
 
         self.pme = CalculatorDipole(
