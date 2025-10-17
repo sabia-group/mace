@@ -78,14 +78,12 @@ class PME(torch.nn.Module):
             interaction = str(interaction)
 
             if interaction == "q-q":
-                from .long_range import ChargeCharge
 
                 self.interactions.append(ChargeCharge(pme_arguments["q-q"]))
                 self.extra_readouts.append(get_readout())
                 self.use_charges = True
 
             elif interaction == "q-mu":
-                from .long_range import ChargeDipole
 
                 self.interactions.append(ChargeDipole(pme_arguments["q-mu"]))
                 self.extra_readouts.append(get_readout())
@@ -93,7 +91,6 @@ class PME(torch.nn.Module):
                 self.use_dipoles = True
 
             elif interaction == "mu-mu":
-                from .long_range import DipoleDipole
 
                 self.interactions.append(DipoleDipole(pme_arguments["mu-mu"]))
                 self.extra_readouts.append(get_readout())
