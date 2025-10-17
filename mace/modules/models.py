@@ -4,7 +4,7 @@
 # This program is distributed under the MIT License (see MIT.md)
 ###########################################################################################
 
-from typing import Any, Callable, Dict, List, Optional, Type, Union, Tuple
+from typing import Any, Callable, Dict, List, Optional, Type, Union
 
 import numpy as np
 import torch
@@ -816,25 +816,12 @@ class AtomicDipolesMACE(torch.nn.Module):
         # Compute the dipoles
         dipoles = torch.stack(dipoles, dim=-1)  # [n_nodes,3,n_contributions]
         atomic_dipoles = torch.sum(dipoles, dim=-1)  # [n_nodes,3]
-        # delta_dipole = scatter_sum(
-        #     src=atomic_dipoles,
-        #     index=data["batch"],
-        #     dim=0,
-        #     dim_size=num_graphs,
-        # )  # [n_graphs,3]
-        # baseline, baseline_atomic = compute_fixed_charge_dipole(
-        #     charges=data["charges"],
-        #     positions=data["positions"],
-        #     batch=data["batch"],
-        #     num_graphs=num_graphs,
-        # )  # [n_graphs,3]
-        # total_dipole = delta_dipole + baseline
 
         total_dipole, baseline_atomic = get_dipole_outputs(
             atomic_dipoles,
             data["ptr"],
             data["batch"],
-            data["charges"],
+            data["oxn"],
             data["positions"],
         )
         return {
@@ -1420,19 +1407,6 @@ class EnergyDipoleMACE(torch.nn.Module):
         node_energy = torch.sum(node_energy_contributions, dim=-1)  # [n_nodes, ]
         dipoles = torch.stack(dipoles, dim=-1)  # [n_nodes,3,n_contributions]
         atomic_dipoles = torch.sum(dipoles, dim=-1)  # [n_nodes,3]
-        # delta_dipole = scatter_sum(
-        #     src=atomic_dipoles,
-        #     index=data["batch"].unsqueeze(-1),
-        #     dim=0,
-        #     dim_size=num_graphs,
-        # )  # [n_graphs,3]
-        # baseline, baseline_atomic = compute_fixed_charge_dipole(
-        #     charges=data["charges"],
-        #     positions=data["positions"],
-        #     batch=data["batch"],
-        #     num_graphs=num_graphs,
-        # )  # [n_graphs,3]
-        # total_dipole = delta_dipole + baseline
 
         # long range
         if self.pme is not None:
