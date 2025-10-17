@@ -51,10 +51,6 @@ class AtomicData(torch_geometric.data.Data):
     dipole_weight: torch.Tensor
     charges_weight: torch.Tensor
     polarizability_weight: torch.Tensor
-    neighbor_indices: torch.Tensor
-    neighbor_distances: torch.Tensor
-    num_edge_index: torch.Tensor
-    num_neighbor: torch.Tensor
 
     def __init__(
         self,
