@@ -236,27 +236,24 @@ def _build_model(
             "RealAgnosticDensityInteractionBlock",
         ]:
             args.interaction_first = "RealAgnosticInteractionBlock"
-        if args.model == "MACE":
-            return modules.ScaleShiftMACE(
-                **model_config,
-                pair_repulsion=args.pair_repulsion,
-                distance_transform=args.distance_transform,
-                correlation=args.correlation,
-                gate=modules.gate_dict[args.gate],
-                interaction_cls_first=modules.interaction_classes[
-                    args.interaction_first
-                ],
-                MLP_irreps=o3.Irreps(args.MLP_irreps),
-                atomic_inter_scale=args.std,
-                atomic_inter_shift=[0.0] * len(heads),
-                radial_MLP=ast.literal_eval(args.radial_MLP),
-                radial_type=args.radial_type,
-                heads=heads,
-                embedding_specs=args.embedding_specs,
-                use_embedding_readout=args.use_embedding_readout,
-                use_last_readout_only=args.use_last_readout_only,
-                use_agnostic_product=args.use_agnostic_product,
-            )
+        return modules.ScaleShiftMACE(
+            **model_config,
+            pair_repulsion=args.pair_repulsion,
+            distance_transform=args.distance_transform,
+            correlation=args.correlation,
+            gate=modules.gate_dict[args.gate],
+            interaction_cls_first=modules.interaction_classes[args.interaction_first],
+            MLP_irreps=o3.Irreps(args.MLP_irreps),
+            atomic_inter_scale=args.std,
+            atomic_inter_shift=[0.0] * len(heads),
+            radial_MLP=ast.literal_eval(args.radial_MLP),
+            radial_type=args.radial_type,
+            heads=heads,
+            embedding_specs=args.embedding_specs,
+            use_embedding_readout=args.use_embedding_readout,
+            use_last_readout_only=args.use_last_readout_only,
+            use_agnostic_product=args.use_agnostic_product,
+        )
     if args.model == "ScaleShiftMACE":
         return modules.ScaleShiftMACE(
             **model_config,
@@ -308,24 +305,21 @@ def _build_model(
         assert args.loss in [
             "energy_forces_dipole",
             "stress+dipole",
-        ], "Invalid '--loss' option. When using the 'EnergyDipoleMACE(PME)' model, choose either 'energy_forces_dipole' or 'stress+dipole'."
+        ], f"Invalid '--loss' option. When using the 'EnergyDipoleMACE' model, choose either 'energy_forces_dipole' or 'stress+dipole' (provided: {args.loss})."
         assert args.error_table in [
             "EnergyDipoleRMSE",
             "StressDipoleRMSE",
         ], f"Invalid '--error_table' option. For the 'EnergyDipoleMACE(PME)' model, choose either 'EnergyDipoleRMSE' or 'StressDipoleRMSE' (provided: {args.error_table})"
-
-        if args.model == "EnergyDipoleMACE":
-            return modules.EnergyDipoleMACE(
-                **model_config,
-                correlation=args.correlation,
-                gate=modules.gate_dict[args.gate],
-                interaction_cls_first=modules.interaction_classes[
-                    "RealAgnosticInteractionBlock"
-                ],
-                MLP_irreps=o3.Irreps(args.MLP_irreps),
-                pme_arguments=args.pme_arguments,
-            )
-
+        return modules.EnergyDipoleMACE(
+            **model_config,
+            correlation=args.correlation,
+            gate=modules.gate_dict[args.gate],
+            interaction_cls_first=modules.interaction_classes[
+                "RealAgnosticInteractionBlock"
+            ],
+            MLP_irreps=o3.Irreps(args.MLP_irreps),
+            pme_arguments=args.pme_arguments
+        )
     if args.model == "AtomicDielectricMACE":
         args.error_table = "DipolePolarRMSE"
         # std_df = modules.scaling_classes["rms_dipoles_scaling"](train_loader)
@@ -367,6 +361,33 @@ def _build_model(
             use_embedding_readout=args.use_embedding_readout,
             use_last_readout_only=args.use_last_readout_only,
             use_agnostic_product=args.use_agnostic_product,
+        )
+    if args.model == "MACEPME":
+        from mace.modules.extensions import MACEPME
+
+        if args.interaction_first not in [
+            "RealAgnosticInteractionBlock",
+            "RealAgnosticDensityInteractionBlock",
+        ]:
+            args.interaction_first = "RealAgnosticInteractionBlock"
+        return MACEPME(
+            **model_config,
+            pair_repulsion=args.pair_repulsion,
+            distance_transform=args.distance_transform,
+            correlation=args.correlation,
+            gate=modules.gate_dict[args.gate],
+            interaction_cls_first=modules.interaction_classes[args.interaction_first],
+            MLP_irreps=o3.Irreps(args.MLP_irreps),
+            atomic_inter_scale=args.std,
+            atomic_inter_shift=[0.0] * len(heads),
+            radial_MLP=ast.literal_eval(args.radial_MLP),
+            radial_type=args.radial_type,
+            heads=heads,
+            embedding_specs=args.embedding_specs,
+            use_embedding_readout=args.use_embedding_readout,
+            use_last_readout_only=args.use_last_readout_only,
+            use_agnostic_product=args.use_agnostic_product,
+            pme_arguments=args.pme_arguments,
         )
 
     raise RuntimeError(f"Unknown model: '{args.model}'")
