@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional
 
 import torch
 from e3nn.util.jit import compile_mode
