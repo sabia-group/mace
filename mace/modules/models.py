@@ -32,9 +32,9 @@ from .blocks import (
 )
 from .utils import (
     compute_dielectric_gradients,
-    get_dipole_outputs,
     compute_fixed_charge_dipole_polar,
     get_atomic_virials_stresses,
+    get_dipole_outputs,
     get_edge_vectors_and_lengths,
     get_outputs,
     get_symmetric_displacement,
