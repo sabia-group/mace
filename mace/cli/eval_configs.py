@@ -7,7 +7,6 @@
 import argparse
 from typing import Dict
 
-import ase.data
 import ase.io
 import numpy as np
 import torch
