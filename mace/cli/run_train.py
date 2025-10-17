@@ -1012,7 +1012,8 @@ def run(args) -> None:
                         _extra_files=extra_files,
                     )
                 except Exception as e:  # pylint: disable=W0718
-                    pass
+                    logging.error(f"Model compilation failed: {e}")
+                    traceback.print_exc()
 
         logging.info("Computing metrics for training, validation, and test sets")
         for param in model.parameters():
