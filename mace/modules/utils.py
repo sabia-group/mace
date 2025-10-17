@@ -692,6 +692,7 @@ def neighbor_ranges(num_neighbor: torch.Tensor) -> Tuple[torch.Tensor, torch.Ten
 
     return start, end
 
+
 def get_dipole_outputs(
     atomic_dipoles: torch.Tensor,
     ptr: torch.Tensor,
