@@ -4,12 +4,12 @@
 # This program is distributed under the MIT License (see MIT.md)
 ###########################################################################################
 
-import traceback
 import ast
 import glob
 import json
 import logging
 import os
+import traceback
 from copy import deepcopy
 from pathlib import Path
 from typing import List, Optional
