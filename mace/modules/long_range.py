@@ -42,7 +42,7 @@ class PME(torch.nn.Module):
             else:
                 try:
                     pme_arguments = json.loads(pme_arguments)
-                except Exception: 
+                except Exception:
                     import ast
 
                     pme_arguments = ast.literal_eval(pme_arguments)
