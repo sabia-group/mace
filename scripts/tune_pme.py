@@ -4,7 +4,8 @@ import numpy as np
 import torch
 import json
 from ase.io import read
-import vesin.torch
+from mace.data.neighborhood import get_neighborhood
+from mace.modules.utils import get_edge_vectors_and_lengths
 
 
 dtype = torch.float64
@@ -66,13 +67,9 @@ def main():
 
     # Build neighbor list
     print(f"Building neighbor list with cutoff {args.cutoff} Å...")
-    nl = vesin.torch.NeighborList(cutoff=args.cutoff, full_list=False)
-    neighbor_indices, neighbor_distances = nl.compute(
-        points=positions,
-        box=cell,
-        periodic=True,
-        quantities="Pd",
-    )
+    neighbor_indices, shifts, _, _ = get_neighborhood(positions,args.cutoff,True,cell)
+    neighbor_distances, _ = get_edge_vectors_and_lengths(positions,neighbor_indices,shifts)   
+
     print(f"Neighbor list computed. Found neighbors for each atom.")
 
     if args.method == "ewald":
@@ -102,7 +99,7 @@ def main():
         cell=cell,
         positions=positions,
         cutoff=args.cutoff,
-        neighbor_indices=neighbor_indices,
+        neighbor_indices=neighbor_indices.T,
         neighbor_distances=neighbor_distances,
     )
     print("Tuning complete.")
