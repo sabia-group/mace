@@ -37,7 +37,7 @@ class PME(torch.nn.Module):
             import os, json
 
             if os.path.isfile(pme_arguments):
-                with open(pme_arguments, "r") as f:
+                with open(pme_arguments, "r", encoding="utf-8") as f:
                     pme_arguments = json.load(f)
             else:
                 try:
