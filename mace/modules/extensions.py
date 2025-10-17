@@ -9,7 +9,6 @@ from mace.modules.utils import (
     get_atomic_virials_stresses,
     get_outputs,
     prepare_graph,
-    neighbor_ranges,
 )
 from mace.modules.wrapper_ops import CuEquivarianceConfig
 from mace.tools.scatter import scatter_sum
