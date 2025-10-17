@@ -817,7 +817,7 @@ class AtomicDipolesMACE(torch.nn.Module):
         dipoles = torch.stack(dipoles, dim=-1)  # [n_nodes,3,n_contributions]
         atomic_dipoles = torch.sum(dipoles, dim=-1)  # [n_nodes,3]
 
-        total_dipole, atomic_dipoles, baseline_atomic = get_dipole_outputs(
+        total_dipole, baseline_atomic = get_dipole_outputs(
             atomic_dipoles,
             data["ptr"],
             data["batch"],
@@ -827,7 +827,7 @@ class AtomicDipolesMACE(torch.nn.Module):
         return {
             "dipole": total_dipole,
             "atomic_dipoles": atomic_dipoles,
-            "baseline-atomic_dipoles": baseline_atomic,
+            "atomic-oxn-dipole": baseline_atomic,
         }
 
 
@@ -1409,7 +1409,7 @@ class EnergyDipoleMACE(torch.nn.Module):
             compute_stress=compute_stress,
         )
 
-        total_dipole, atomic_dipoles, baseline_atomic = get_dipole_outputs(
+        total_dipole, baseline_atomic = get_dipole_outputs(
             atomic_dipoles,
             data["ptr"],
             data["batch"],
@@ -1426,5 +1426,5 @@ class EnergyDipoleMACE(torch.nn.Module):
             "displacement": displacement,
             "dipole": total_dipole,
             "atomic_dipoles": atomic_dipoles,
-            "baseline-atomic_dipoles": baseline_atomic,
+            "atomic-oxn-dipole": baseline_atomic,
         }
