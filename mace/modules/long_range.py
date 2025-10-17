@@ -1,6 +1,8 @@
-import torch
 from typing import Dict, Optional
+
+import torch
 from e3nn.util.jit import compile_mode
+
 from mace.modules.blocks import LinearReadoutBlock
 from mace.modules.utils import get_edge_vectors_and_lengths
 
@@ -34,7 +36,8 @@ class PME(torch.nn.Module):
 
         # extract pme arguments
         if isinstance(pme_arguments, str):
-            import os, json
+            import json
+            import os
 
             if os.path.isfile(pme_arguments):
                 with open(pme_arguments, "r", encoding="utf-8") as f:

@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 import argparse
+import json
+
 import numpy as np
 import torch
-import json
 from ase.io import read
+
 from mace.data.neighborhood import get_neighborhood
 from mace.modules.utils import get_edge_vectors_and_lengths
-
 
 dtype = torch.float64
 
