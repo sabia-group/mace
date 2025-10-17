@@ -32,7 +32,7 @@ from .blocks import (
 )
 from .utils import (
     compute_dielectric_gradients,
-    compute_fixed_charge_dipole,
+    get_dipole_outputs,
     compute_fixed_charge_dipole_polar,
     get_atomic_virials_stresses,
     get_edge_vectors_and_lengths,
@@ -1428,55 +1428,3 @@ class EnergyDipoleMACE(torch.nn.Module):
             "atomic_dipoles": atomic_dipoles,
             "baseline-atomic_dipoles": baseline_atomic,
         }
-
-
-def get_dipole_outputs(
-    atomic_dipoles: torch.Tensor,
-    ptr: torch.Tensor,
-    batch: torch.Tensor,
-    charges: torch.Tensor,
-    positions: torch.Tensor,
-    # data: Batch
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """
-    Computes the dipole outputs for the MACE model.
-
-    Args:
-        atomic_dipoles (Tensor): Atomic dipoles of shape [n_nodes, 3].
-        data (Dict[str, Tensor]): Dictionary with keys:
-            - "ptr": (Tensor)
-            - "batch": (Tensor)
-            - "charges": (Tensor)
-            - "positions": (Tensor)
-
-    Returns:
-        Dict[str, Tensor]: Contains:
-            - "dipole": [n_graphs, 3]
-            - "atomic_dipoles": [n_nodes, 3]
-            - "baseline-atomic_dipoles": [n_nodes, 3]
-    """
-    num_graphs = ptr.numel() - 1
-    delta_dipole = scatter_sum(
-        atomic_dipoles,
-        batch.unsqueeze(-1),
-        dim=0,
-        dim_size=num_graphs,
-    )  # [n_graphs, 3]
-
-    baseline, baseline_atomic = compute_fixed_charge_dipole(
-        charges=charges,
-        positions=positions,
-        batch=batch,
-        num_graphs=num_graphs,
-    )  # [n_graphs,3], [n_nodes,3]
-
-    total_dipole = delta_dipole + baseline
-    atomic_dipoles = atomic_dipoles + baseline_atomic
-
-    return total_dipole, atomic_dipoles, baseline_atomic
-
-    # return {
-    #     "dipole": total_dipole,
-    #     "atomic_dipoles": atomic_dipoles + baseline_atomic,
-    #     "baseline-atomic_dipoles": baseline_atomic,
-    # }
