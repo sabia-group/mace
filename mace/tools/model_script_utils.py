@@ -318,7 +318,7 @@ def _build_model(
                 "RealAgnosticInteractionBlock"
             ],
             MLP_irreps=o3.Irreps(args.MLP_irreps),
-            pme_arguments=args.pme_arguments
+            pme_arguments=args.pme_arguments,
         )
     if args.model == "AtomicDielectricMACE":
         args.error_table = "DipolePolarRMSE"

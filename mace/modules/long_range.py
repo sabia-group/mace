@@ -11,10 +11,6 @@ from mace.modules.utils import get_edge_vectors_and_lengths
 # - autodiff ChargeDipole and check that it is the same as DipoleDipole
 
 
-def full2half(edge_index: torch.Tensor) -> torch.Tensor:
-    return edge_index[0, :] < edge_index[1, :]
-
-
 @compile_mode("script")
 class PME(torch.nn.Module):
     """
@@ -151,7 +147,7 @@ class PME(torch.nn.Module):
             shifts = data["shifts"][prev_edge:n_edges, :]
 
             # graph
-            edge_mask = full2half(edge_index)
+            edge_mask = edge_index[0, :] < edge_index[1, :]
             edge_index = edge_index[:, edge_mask] - prev_Natoms
             shifts = shifts[edge_mask, :]
 
