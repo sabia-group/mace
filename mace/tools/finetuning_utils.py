@@ -17,6 +17,7 @@ def load_foundations_elements(
     """
     assert model_foundations.r_max == model.r_max
     z_table = AtomicNumberTable([int(z) for z in model_foundations.atomic_numbers])
+    model_heads = model.heads
     new_z_table = table
     num_species_foundations = len(z_table.zs)
     num_channels_foundation = (
@@ -142,7 +143,6 @@ def load_foundations_elements(
 
     if load_readout:
         # Transferring readouts
-        model_heads = model.heads
         model_readouts_zero_linear_weight = model.readouts[0].linear.weight.clone()
         model_readouts_zero_linear_weight = (
             model_foundations.readouts[0]
