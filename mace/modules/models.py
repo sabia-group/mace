@@ -13,7 +13,7 @@ from e3nn.util.jit import compile_mode
 
 from mace.modules.embeddings import GenericJointEmbedding
 from mace.modules.radial import ZBLBasis
-from mace.tools.scatter import scatter_sum, scatter_mean
+from mace.tools.scatter import scatter_mean, scatter_sum
 from mace.tools.torch_tools import get_change_of_basis, spherical_to_cartesian
 
 from .blocks import (
