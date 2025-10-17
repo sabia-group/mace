@@ -70,7 +70,7 @@ def main():
     neighbor_indices, shifts, _, _ = get_neighborhood(positions,args.cutoff,True,cell)
     neighbor_distances, _ = get_edge_vectors_and_lengths(positions,neighbor_indices,shifts)   
 
-    print(f"Neighbor list computed. Found neighbors for each atom.")
+    print("Neighbor list computed. Found neighbors for each atom.")
 
     if args.method == "ewald":
         from torchpme.tuning import tune_ewald
