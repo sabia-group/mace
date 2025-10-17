@@ -295,6 +295,9 @@ class ChargeDipole(LongRange):
         super().__init__(pme_arguments)
         raise ValueError("'ChargeDipole' not implemented yet.")
 
+    def forward(self, data: Dict[str, torch.Tensor]) -> torch.Tensor:
+        raise NotImplementedError("'ChargeDipole' not implemented yet")
+
 
 class DipoleDipole(LongRange):
     def __init__(self, pme_arguments: Optional[Dict] = None, **kwargs):
