@@ -237,6 +237,9 @@ class LongRange(torch.nn.Module):
         if "lr_wavelength" not in pme_arguments:
             raise ValueError("Must specify 'lr_wavelength'.")
 
+    def forward(self, data: Dict[str, torch.Tensor]) -> torch.Tensor:
+        raise NotImplementedError("LongRange is an abstract base class")
+
 
 class ChargeCharge(LongRange):
     def __init__(self, pme_arguments: Dict):
