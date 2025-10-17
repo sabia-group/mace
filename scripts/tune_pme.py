@@ -73,17 +73,32 @@ def main():
     print("Neighbor list computed. Found neighbors for each atom.")
 
     if args.method == "ewald":
-        from torchpme.tuning import tune_ewald
+        try:
+            from torchpme.tuning import tune_ewald
+        except ImportError as e:
+            raise ImportError(
+                "torchpme is not installed. Please install it to use the 'ewald' method."
+            ) from e
 
         tune = tune_ewald
         print("Using 'tune_ewald' for tuning")
     elif args.method == "pme":
-        from torchpme.tuning import tune_pme
+        try:
+            from torchpme.tuning import tune_pme
+        except ImportError as e:
+            raise ImportError(
+                "torchpme is not installed. Please install it to use the 'pme' method."
+            ) from e
 
         tune = tune_pme
         print("Using 'tune_pme' for tuning")
     elif args.method == "p3m":
-        from torchpme.tuning import tune_p3m
+        try:
+            from torchpme.tuning import tune_p3m
+        except ImportError as e:    
+            raise ImportError(
+                "torchpme is not installed. Please install it to use the 'p3m' method."
+            ) from e
 
         tune = tune_p3m
         print("Using 'tune_p3m' for tuning")
