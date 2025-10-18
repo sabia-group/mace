@@ -10,19 +10,28 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.10"
           cache: "pip"
+
       - name: Install requirements
         run: |
-          pip install -U pip
-          pip install pylint
-          pip install -U black
+          set -xe  # show each command and stop on errors
+          pip install -U pip setuptools wheel
+          pip install pylint black wandb tqdm
           pip install .[dev]
-          pip install wandb
-          pip install tqdm
-      - name: Run black
+
+      - name: Run black (verbose)
         run: |
-          python -m black .
-      - uses: pre-commit/action@v3.0.0
+          set -xe
+          python -m black --verbose .
+
+      - name: Run pre-commit (verbose)
+        uses: pre-commit/action@v3.0.0
+        env:
+          PRE_COMMIT_COLOR: always
+          PRE_COMMIT_HOME: ~/.cache/pre-commit
+        with:
+          extra_args: --verbose --all-files
