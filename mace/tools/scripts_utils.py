@@ -587,11 +587,11 @@ def get_loss_fn(
     compute_dipole: bool,
 ) -> torch.nn.Module:
     if args.loss == "weighted":
-        loss_fn = modules.WeightedEnergyForcesLoss(
-            energy_weight=args.energy_weight, forces_weight=args.forces_weight
+        loss_fn = modules.WeightedEnergyForcesStressLoss(
+            energy_weight=args.energy_weight,
+            forces_weight=args.forces_weight,
+            stress_weight=args.stress_weight,
         )
-    elif args.loss == "forces_only":
-        loss_fn = modules.WeightedForcesLoss(forces_weight=args.forces_weight)
     elif args.loss == "virials":
         loss_fn = modules.WeightedEnergyForcesVirialsLoss(
             energy_weight=args.energy_weight,
@@ -651,7 +651,9 @@ def get_loss_fn(
             dipole_weight=args.dipole_weight,
         )
     else:
-        loss_fn = modules.WeightedEnergyForcesLoss(energy_weight=1.0, forces_weight=1.0)
+        loss_fn = modules.WeightedEnergyForcesStressLoss(
+            energy_weight=1.0, forces_weight=1.0
+        )
     return loss_fn
 
 
@@ -672,8 +674,6 @@ def get_swa(
                 f"Start Stage Two must be less than max_num_epochs, got {args.start_swa} > {args.max_num_epochs}"
             )
             swas[-1] = False
-    if args.loss == "forces_only":
-        raise ValueError("Can not select Stage Two with forces only loss.")
     if args.loss == "virials":
         loss_fn_energy = modules.WeightedEnergyForcesVirialsLoss(
             energy_weight=args.swa_energy_weight,
@@ -730,7 +730,7 @@ def get_swa(
             f"Stage Two (after {args.start_swa} epochs) with loss function: {loss_fn_energy}, energy weight : {args.swa_energy_weight}, forces weight : {args.swa_forces_weight}, stress weight : {args.swa_stress_weight}, dipole weight : {args.swa_dipole_weight} and learning rate : {args.swa_lr}"
         )
     else:
-        loss_fn_energy = modules.WeightedEnergyForcesLoss(
+        loss_fn_energy = modules.WeightedEnergyForcesStressLoss(
             energy_weight=args.swa_energy_weight,
             forces_weight=args.swa_forces_weight,
         )
