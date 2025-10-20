@@ -647,7 +647,6 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         choices=[
             "ef",
             "weighted",
-            "virials",
             "dipole",
             "stress+dipole",
             "dipole_polar",

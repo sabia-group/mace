@@ -591,18 +591,7 @@ def get_loss_fn(
             energy_weight=args.energy_weight,
             forces_weight=args.forces_weight,
             stress_weight=args.stress_weight,
-        )
-    elif args.loss == "virials":
-        loss_fn = modules.WeightedEnergyForcesVirialsLoss(
-            energy_weight=args.energy_weight,
-            forces_weight=args.forces_weight,
             virials_weight=args.virials_weight,
-        )
-    elif args.loss == "stress":
-        loss_fn = modules.PESLoss(
-            energy_weight=args.energy_weight,
-            forces_weight=args.forces_weight,
-            stress_weight=args.stress_weight,
         )
     elif args.loss == "huber":
         loss_fn = modules.WeightedHuberEnergyForcesStressLoss(
@@ -672,23 +661,15 @@ def get_swa(
                 f"Start Stage Two must be less than max_num_epochs, got {args.start_swa} > {args.max_num_epochs}"
             )
             swas[-1] = False
-    if args.loss == "virials":
-        loss_fn_energy = modules.WeightedEnergyForcesVirialsLoss(
-            energy_weight=args.swa_energy_weight,
-            forces_weight=args.swa_forces_weight,
-            virials_weight=args.swa_virials_weight,
-        )
-        logging.info(
-            f"Stage Two (after {args.start_swa} epochs) with loss function: {loss_fn_energy}, energy weight : {args.swa_energy_weight}, forces weight : {args.swa_forces_weight},  virials_weight: {args.swa_virials_weight} and learning rate : {args.swa_lr}"
-        )
-    elif args.loss == "stress":
+    if args.loss == "weighted":
         loss_fn_energy = modules.PESLoss(
             energy_weight=args.swa_energy_weight,
             forces_weight=args.swa_forces_weight,
             stress_weight=args.swa_stress_weight,
+            virials_weight=args.swa_virials_weight,
         )
         logging.info(
-            f"Stage Two (after {args.start_swa} epochs) with loss function: {loss_fn_energy}, energy weight : {args.swa_energy_weight}, forces weight : {args.swa_forces_weight}, stress weight : {args.swa_stress_weight} and learning rate : {args.swa_lr}"
+            f"Stage Two (after {args.start_swa} epochs) with loss function: {loss_fn_energy}, energy weight : {args.swa_energy_weight}, forces weight : {args.swa_forces_weight}, stress weight : {args.swa_stress_weight},  virials_weight: {args.swa_virials_weight} and learning rate : {args.swa_lr}"
         )
     elif args.loss == "dipole_polar":
         loss_fn_energy = modules.DipolePolarLoss(
@@ -726,14 +707,6 @@ def get_swa(
         )
         logging.info(
             f"Stage Two (after {args.start_swa} epochs) with loss function: {loss_fn_energy}, energy weight : {args.swa_energy_weight}, forces weight : {args.swa_forces_weight}, stress weight : {args.swa_stress_weight}, dipole weight : {args.swa_dipole_weight} and learning rate : {args.swa_lr}"
-        )
-    else:
-        loss_fn_energy = modules.PESLoss(
-            energy_weight=args.swa_energy_weight,
-            forces_weight=args.swa_forces_weight,
-        )
-        logging.info(
-            f"Stage Two (after {args.start_swa} epochs) with loss function: {loss_fn_energy}, with energy weight : {args.swa_energy_weight}, forces weight : {args.swa_forces_weight} and learning rate : {args.swa_lr}"
         )
     swa = SWAContainer(
         model=AveragedModel(model),
