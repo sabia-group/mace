@@ -490,31 +490,7 @@ class UniversalLoss(torch.nn.Module):
 
 
 class DielectricLoss(torch.nn.Module):
-    def __init__(self, dipole_weight=1.0) -> None:
-        super().__init__()
-        self.register_buffer(
-            "dipole_weight",
-            torch.tensor(dipole_weight, dtype=torch.get_default_dtype()),
-        )
-
-    def forward(
-        self, ref: Batch, pred: TensorDict, ddp: Optional[bool] = None
-    ) -> torch.Tensor:
-        loss = (
-            weighted_mean_squared_error_dipole(ref, pred, ddp) * 100.0
-        )  # scale adjustment
-        return self.dipole_weight * loss
-
-    def __repr__(self):
-        return f"{self.__class__.__name__}(dipole_weight={self.dipole_weight:.3f})"
-
-
-class DipolePolarLoss(torch.nn.Module):
-    def __init__(
-        self, dipole_weight=1.0, polarizability_weight=1.0
-    ) -> (
-        None
-    ):  # dipole_mean=None,dipole_std=None,polarizability_mean=None,polarizability_std=None
+    def __init__(self, dipole_weight=0.0,polarizability_weight=0.0) -> None:
         super().__init__()
         self.register_buffer(
             "dipole_weight",
@@ -528,23 +504,19 @@ class DipolePolarLoss(torch.nn.Module):
     def forward(
         self, ref: Batch, pred: TensorDict, ddp: Optional[bool] = None
     ) -> torch.Tensor:
-        loss_dipole = weighted_mean_squared_error_dipole(
-            ref, pred, ddp
-        )  # ,self.dipole_mean,self.dipole_std) #* 100.0  # scale adjustment
-
-        loss_polarizability = weighted_mean_squared_error_polarizability(
-            ref, pred, ddp
-        )  # ,self.polarizability_mean,self.polarizability_std) #* 100.0  # scale adjustment
-        return (
-            self.dipole_weight * loss_dipole
-            + self.polarizability_weight * loss_polarizability
-        )
+        loss = torch.tensor(0.0)
+        if self.dipole_weight > 0.0:
+            loss = loss + self.dipole_weight * weighted_mean_squared_error_dipole(ref, pred, ddp)
+        if self.polarizability_weight > 0.0:
+            loss = loss + self.polarizability_weight * weighted_mean_squared_error_polarizability(ref, pred, ddp)
+        return loss
 
     def __repr__(self):
         return (
             f"{self.__class__.__name__}("
-            f"dipole_weight={self.dipole_weight:.3f}, polarizability_weight={self.polarizability_weight:.3f})"
+            f"dipole_weight={self.dipole_weight:.2e}, polarizability_weight={self.polarizability_weight:.2e})"
         )
+
 
 
 class WeightedEnergyForcesDipoleLoss(torch.nn.Module):
