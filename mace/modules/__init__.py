@@ -24,12 +24,9 @@ from .blocks import (
     ScaleShiftBlock,
 )
 from .loss import (
-    DielectricLoss,
     UniversalLoss,
-    WeightedEnergyForcesDipoleLoss,
     WeightedEnergyForcesL1L2Loss,
-    WeightedEnergyForcesStressDipoleLoss,
-    PESLoss,
+    PESDielectricLoss,
     WeightedHuberEnergyForcesStressLoss,
 )
 from .models import (
@@ -104,10 +101,7 @@ __all__ = [
     "AtomicDipolesMACE",
     "AtomicDielectricMACE",
     "EnergyDipoleMACE",
-    "PESLoss",
-    "WeightedEnergyForcesStressDipoleLoss",
-    "DielectricLoss",
-    "WeightedEnergyForcesDipoleLoss",
+    "PESDielectricLoss",
     "WeightedHuberEnergyForcesStressLoss",
     "UniversalLoss",
     "WeightedEnergyForcesL1L2Loss",

@@ -243,13 +243,15 @@ def conditional_huber_forces(
 # ------------------------------------------------------------------------------
 
 
-class PESLoss(torch.nn.Module):
+class PESDielectricLoss(torch.nn.Module):
     def __init__(
         self,
         energy_weight=0.0,
         forces_weight=0.0,
         stress_weight=0.0,
         virials_weight=0.0,
+        dipole_weight=0.0,
+        polarizability_weight=0.0,
     ) -> None:
         super().__init__()
         self.register_buffer(
@@ -267,6 +269,14 @@ class PESLoss(torch.nn.Module):
         self.register_buffer(
             "virials_weight",
             torch.tensor(virials_weight, dtype=torch.get_default_dtype()),
+        )
+        self.register_buffer(
+            "dipole_weight",
+            torch.tensor(dipole_weight, dtype=torch.get_default_dtype()),
+        )
+        self.register_buffer(
+            "polarizability_weight",
+            torch.tensor(polarizability_weight, dtype=torch.get_default_dtype()),
         )
 
     def forward(
@@ -287,6 +297,16 @@ class PESLoss(torch.nn.Module):
             loss = loss + self.virials_weight * weighted_mean_squared_virials(
                 ref, pred, ddp
             )
+        if self.dipole_weight > 0.0:
+            loss = loss + self.dipole_weight * weighted_mean_squared_error_dipole(
+                ref, pred, ddp
+            )
+        if self.polarizability_weight > 0.0:
+            loss = (
+                loss
+                + self.polarizability_weight
+                * weighted_mean_squared_error_polarizability(ref, pred, ddp)
+            )
         return loss
 
     def __repr__(self):
@@ -295,50 +315,9 @@ class PESLoss(torch.nn.Module):
             + f"(energy_weight={self.energy_weight:.2e}, "
             + f"forces_weight={self.forces_weight:.2e}, "
             + f"stress_weight={self.stress_weight:.2e}, "
-            + f"virials_weight={self.virials_weight:.2e})"
-        )
-
-
-class WeightedEnergyForcesStressDipoleLoss(torch.nn.Module):
-    def __init__(
-        self, energy_weight=1.0, forces_weight=1.0, stress_weight=1.0, dipole_weight=1.0
-    ) -> None:
-        super().__init__()
-        self.register_buffer(
-            "energy_weight",
-            torch.tensor(energy_weight, dtype=torch.get_default_dtype()),
-        )
-        self.register_buffer(
-            "forces_weight",
-            torch.tensor(forces_weight, dtype=torch.get_default_dtype()),
-        )
-        self.register_buffer(
-            "stress_weight",
-            torch.tensor(stress_weight, dtype=torch.get_default_dtype()),
-        )
-        self.register_buffer(
-            "dipole_weight",
-            torch.tensor(dipole_weight, dtype=torch.get_default_dtype()),
-        )
-
-    def forward(
-        self, ref: Batch, pred: TensorDict, ddp: Optional[bool] = None
-    ) -> torch.Tensor:
-        loss_energy = weighted_mean_squared_error_energy(ref, pred, ddp)
-        loss_forces = mean_squared_error_forces(ref, pred, ddp)
-        loss_stress = weighted_mean_squared_stress(ref, pred, ddp)
-        loss_dipole = weighted_mean_squared_error_dipole(ref, pred, ddp)
-        return (
-            self.energy_weight * loss_energy
-            + self.forces_weight * loss_forces
-            + self.stress_weight * loss_stress
-            + self.dipole_weight * loss_dipole
-        )
-
-    def __repr__(self):
-        return (
-            f"{self.__class__.__name__}(energy_weight={self.energy_weight:.3f}, "
-            f"forces_weight={self.forces_weight:.3f}, stress_weight={self.stress_weight:.3f}, dipole_weight={self.dipole_weight:.3f})"
+            + f"virials_weight={self.virials_weight:.2e},"
+            + f"dipole_weight={self.dipole_weight:.2e},"
+            + f"polarizability_weight={self.polarizability_weight:.2e})"
         )
 
 
@@ -521,41 +500,6 @@ class DielectricLoss(torch.nn.Module):
         return (
             f"{self.__class__.__name__}("
             f"dipole_weight={self.dipole_weight:.2e}, polarizability_weight={self.polarizability_weight:.2e})"
-        )
-
-
-class WeightedEnergyForcesDipoleLoss(torch.nn.Module):
-    def __init__(self, energy_weight=1.0, forces_weight=1.0, dipole_weight=1.0) -> None:
-        super().__init__()
-        self.register_buffer(
-            "energy_weight",
-            torch.tensor(energy_weight, dtype=torch.get_default_dtype()),
-        )
-        self.register_buffer(
-            "forces_weight",
-            torch.tensor(forces_weight, dtype=torch.get_default_dtype()),
-        )
-        self.register_buffer(
-            "dipole_weight",
-            torch.tensor(dipole_weight, dtype=torch.get_default_dtype()),
-        )
-
-    def forward(
-        self, ref: Batch, pred: TensorDict, ddp: Optional[bool] = None
-    ) -> torch.Tensor:
-        loss_energy = weighted_mean_squared_error_energy(ref, pred, ddp)
-        loss_forces = mean_squared_error_forces(ref, pred, ddp)
-        loss_dipole = weighted_mean_squared_error_dipole(ref, pred, ddp) * 100.0
-        return (
-            self.energy_weight * loss_energy
-            + self.forces_weight * loss_forces
-            + self.dipole_weight * loss_dipole
-        )
-
-    def __repr__(self):
-        return (
-            f"{self.__class__.__name__}(energy_weight={self.energy_weight:.3f}, "
-            f"forces_weight={self.forces_weight:.3f}, dipole_weight={self.dipole_weight:.3f})"
         )
 
 
