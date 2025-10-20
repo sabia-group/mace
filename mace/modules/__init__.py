@@ -25,7 +25,7 @@ from .blocks import (
 )
 from .loss import (
     DipolePolarLoss,
-    DipoleSingleLoss,
+    DielectricLoss,
     UniversalLoss,
     WeightedEnergyForcesDipoleLoss,
     WeightedEnergyForcesL1L2Loss,
@@ -107,7 +107,7 @@ __all__ = [
     "EnergyDipoleMACE",
     "PESLoss",
     "WeightedEnergyForcesStressDipoleLoss",
-    "DipoleSingleLoss",
+    "DielectricLoss",
     "WeightedEnergyForcesDipoleLoss",
     "WeightedHuberEnergyForcesStressLoss",
     "UniversalLoss",

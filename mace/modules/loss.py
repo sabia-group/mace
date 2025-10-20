@@ -489,7 +489,7 @@ class UniversalLoss(torch.nn.Module):
         )
 
 
-class DipoleSingleLoss(torch.nn.Module):
+class DielectricLoss(torch.nn.Module):
     def __init__(self, dipole_weight=1.0) -> None:
         super().__init__()
         self.register_buffer(
