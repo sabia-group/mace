@@ -20,11 +20,6 @@ def is_ddp_enabled():
     return dist.is_initialized() and dist.get_world_size() > 1
 
 
-import torch
-import torch.distributed as dist
-from typing import Optional
-
-
 def reduce_loss(raw_loss: torch.Tensor, ddp: Optional[bool] = None) -> torch.Tensor:
     """
     Reduces an element-wise loss tensor, handling NaN values.
