@@ -646,9 +646,12 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         default="weighted",
         choices=[
             "ef",
+            "pes",
             "weighted",
+            "forces_only",
+            "virials",
+            "stress",
             "dipole",
-            "stress+dipole",
             "dipole_polar",
             "huber",
             "universal",
@@ -657,7 +660,7 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         ],
     )
     parser.add_argument(
-        "--forces_weight", help="weight of forces loss", type=float, default=0.0
+        "--forces_weight", help="weight of forces loss", type=float, default=100.0
     )
     parser.add_argument(
         "--swa_forces_weight",
@@ -668,7 +671,7 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         dest="swa_forces_weight",
     )
     parser.add_argument(
-        "--energy_weight", help="weight of energy loss", type=float, default=0.0
+        "--energy_weight", help="weight of energy loss", type=float, default=1.0
     )
     parser.add_argument(
         "--swa_energy_weight",
@@ -679,7 +682,7 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         dest="swa_energy_weight",
     )
     parser.add_argument(
-        "--virials_weight", help="weight of virials loss", type=float, default=0.0
+        "--virials_weight", help="weight of virials loss", type=float, default=1.0
     )
     parser.add_argument(
         "--swa_virials_weight",
@@ -690,7 +693,7 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         dest="swa_virials_weight",
     )
     parser.add_argument(
-        "--stress_weight", help="weight of stress loss", type=float, default=0.0
+        "--stress_weight", help="weight of stress loss", type=float, default=1.0
     )
     parser.add_argument(
         "--swa_stress_weight",
