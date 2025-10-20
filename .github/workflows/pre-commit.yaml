@@ -17,7 +17,7 @@ jobs:
       - name: Install requirements
         run: |
           pip install -U pip
-          pip install pylint
+          pip install pylint==3.3.8
           pip install -U black
           pip install .[dev]
           pip install wandb
