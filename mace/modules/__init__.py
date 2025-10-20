@@ -24,9 +24,9 @@ from .blocks import (
     ScaleShiftBlock,
 )
 from .loss import (
+    PESDielectricLoss,
     UniversalLoss,
     WeightedEnergyForcesL1L2Loss,
-    PESDielectricLoss,
     WeightedHuberEnergyForcesStressLoss,
 )
 from .models import (

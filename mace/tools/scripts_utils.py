@@ -727,7 +727,7 @@ def get_swa(
         )
     elif args.loss == "energy_forces_dipole":
         loss_fn_energy = modules.PESDielectricLoss(
-            args.swa_energy_weight,
+            energy_weight=args.swa_energy_weight,
             forces_weight=args.swa_forces_weight,
             dipole_weight=args.swa_dipole_weight,
         )
