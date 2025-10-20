@@ -272,16 +272,22 @@ class PESLoss(torch.nn.Module):
     def forward(
         self, ref: Batch, pred: TensorDict, ddp: Optional[bool] = None
     ) -> torch.Tensor:
-        loss_energy = weighted_mean_squared_error_energy(ref, pred, ddp)
-        loss_forces = mean_squared_error_forces(ref, pred, ddp)
-        loss_stress = weighted_mean_squared_stress(ref, pred, ddp)
-        loss_virials = weighted_mean_squared_virials(ref, pred, ddp)
-        return (
-            self.energy_weight * loss_energy
-            + self.forces_weight * loss_forces
-            + self.stress_weight * loss_stress
-            + self.virials_weight * loss_virials
-        )
+        loss = torch.tensor(0.0)
+        if self.energy_weight > 0.0:
+            loss = loss + self.energy_weight * weighted_mean_squared_error_energy(
+                ref, pred, ddp
+            )
+        if self.forces_weight > 0.0:
+            loss = loss + self.forces_weight * mean_squared_error_forces(ref, pred, ddp)
+        if self.stress_weight > 0.0:
+            loss = loss + self.stress_weight * weighted_mean_squared_stress(
+                ref, pred, ddp
+            )
+        if self.virials_weight > 0.0:
+            loss = loss + self.virials_weight * weighted_mean_squared_virials(
+                ref, pred, ddp
+            )
+        return loss
 
     def __repr__(self):
         return (
