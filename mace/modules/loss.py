@@ -272,7 +272,7 @@ class PESLoss(torch.nn.Module):
     def forward(
         self, ref: Batch, pred: TensorDict, ddp: Optional[bool] = None
     ) -> torch.Tensor:
-        loss = torch.tensor(0.0)
+        loss = torch.tensor(0.0, dtype=torch.get_default_dtype())
         if self.energy_weight > 0.0:
             loss = loss + self.energy_weight * weighted_mean_squared_error_energy(
                 ref, pred, ddp
@@ -504,7 +504,7 @@ class DielectricLoss(torch.nn.Module):
     def forward(
         self, ref: Batch, pred: TensorDict, ddp: Optional[bool] = None
     ) -> torch.Tensor:
-        loss = torch.tensor(0.0)
+        loss = torch.tensor(0.0, dtype=torch.get_default_dtype())
         if self.dipole_weight > 0.0:
             loss = loss + self.dipole_weight * weighted_mean_squared_error_dipole(
                 ref, pred, ddp
