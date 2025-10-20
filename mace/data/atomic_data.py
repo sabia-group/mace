@@ -310,7 +310,7 @@ class AtomicData(torch_geometric.data.Data):
             else torch.zeros(num_atoms, dtype=torch.get_default_dtype())
         )
         if not torch.all(oxn == oxn.floor()):
-            raise ValueError(f"oxn must contain integer values")
+            raise ValueError("oxn must contain integer values")
         oxn = oxn.to(dtype=torch.get_default_dtype())
         elec_temp = (
             torch.tensor(
