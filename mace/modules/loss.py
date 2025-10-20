@@ -20,27 +20,51 @@ def is_ddp_enabled():
     return dist.is_initialized() and dist.get_world_size() > 1
 
 
+import torch
+import torch.distributed as dist
+from typing import Optional
+
+
 def reduce_loss(raw_loss: torch.Tensor, ddp: Optional[bool] = None) -> torch.Tensor:
     """
-    Reduces an element-wise loss tensor.
+    Reduces an element-wise loss tensor, handling NaN values.
 
     If ddp is True and distributed is initialized, the function computes:
 
         loss = (local_sum * world_size) / global_num_elements
 
-    Otherwise, it returns the regular mean.
+    Otherwise, it returns the regular mean of the valid (non-NaN) entries.
     """
     ddp = is_ddp_enabled() if ddp is None else ddp
+
+    # Mask out NaNs
+    valid_mask = ~torch.isnan(raw_loss)
+    valid_loss = raw_loss[valid_mask]
+
+    if valid_loss.numel() == 0:
+        # Handle case where all entries are NaN
+        return torch.tensor(0.0, device=raw_loss.device, dtype=raw_loss.dtype)
+
+    local_sum = valid_loss.sum()
+    local_count = valid_loss.numel()
+
     if ddp and dist.is_initialized():
-        world_size = dist.get_world_size()
-        n_local = raw_loss.numel()
-        loss_sum = raw_loss.sum()
-        total_samples = torch.tensor(
-            n_local, device=raw_loss.device, dtype=raw_loss.dtype
+        world_sum = local_sum.clone()
+        world_count = torch.tensor(
+            local_count, device=raw_loss.device, dtype=raw_loss.dtype
         )
-        dist.all_reduce(total_samples, op=dist.ReduceOp.SUM)
-        return loss_sum * world_size / total_samples
-    return raw_loss.mean()
+
+        dist.all_reduce(world_sum, op=dist.ReduceOp.SUM)
+        dist.all_reduce(world_count, op=dist.ReduceOp.SUM)
+
+        # Avoid division by zero if all ranks had NaNs
+        if world_count.item() == 0:
+            return torch.tensor(0.0, device=raw_loss.device, dtype=raw_loss.dtype)
+
+        return world_sum / world_count
+
+    # Non-DDP: just mean over valid entries
+    return local_sum / local_count
 
 
 # ------------------------------------------------------------------------------
