@@ -243,7 +243,7 @@ def conditional_huber_forces(
 # ------------------------------------------------------------------------------
 
 
-class WeightedEnergyForcesStressLoss(torch.nn.Module):
+class PESLoss(torch.nn.Module):
     def __init__(self, energy_weight=0.0, forces_weight=0.0, stress_weight=0.0) -> None:
         super().__init__()
         self.register_buffer(

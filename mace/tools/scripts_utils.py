@@ -587,7 +587,7 @@ def get_loss_fn(
     compute_dipole: bool,
 ) -> torch.nn.Module:
     if args.loss == "weighted":
-        loss_fn = modules.WeightedEnergyForcesStressLoss(
+        loss_fn = modules.PESLoss(
             energy_weight=args.energy_weight,
             forces_weight=args.forces_weight,
             stress_weight=args.stress_weight,
@@ -599,7 +599,7 @@ def get_loss_fn(
             virials_weight=args.virials_weight,
         )
     elif args.loss == "stress":
-        loss_fn = modules.WeightedEnergyForcesStressLoss(
+        loss_fn = modules.PESLoss(
             energy_weight=args.energy_weight,
             forces_weight=args.forces_weight,
             stress_weight=args.stress_weight,
@@ -651,9 +651,7 @@ def get_loss_fn(
             dipole_weight=args.dipole_weight,
         )
     else:
-        loss_fn = modules.WeightedEnergyForcesStressLoss(
-            energy_weight=1.0, forces_weight=1.0
-        )
+        loss_fn = modules.PESLoss(energy_weight=1.0, forces_weight=1.0)
     return loss_fn
 
 
@@ -684,7 +682,7 @@ def get_swa(
             f"Stage Two (after {args.start_swa} epochs) with loss function: {loss_fn_energy}, energy weight : {args.swa_energy_weight}, forces weight : {args.swa_forces_weight},  virials_weight: {args.swa_virials_weight} and learning rate : {args.swa_lr}"
         )
     elif args.loss == "stress":
-        loss_fn_energy = modules.WeightedEnergyForcesStressLoss(
+        loss_fn_energy = modules.PESLoss(
             energy_weight=args.swa_energy_weight,
             forces_weight=args.swa_forces_weight,
             stress_weight=args.swa_stress_weight,
@@ -730,7 +728,7 @@ def get_swa(
             f"Stage Two (after {args.start_swa} epochs) with loss function: {loss_fn_energy}, energy weight : {args.swa_energy_weight}, forces weight : {args.swa_forces_weight}, stress weight : {args.swa_stress_weight}, dipole weight : {args.swa_dipole_weight} and learning rate : {args.swa_lr}"
         )
     else:
-        loss_fn_energy = modules.WeightedEnergyForcesStressLoss(
+        loss_fn_energy = modules.PESLoss(
             energy_weight=args.swa_energy_weight,
             forces_weight=args.swa_forces_weight,
         )

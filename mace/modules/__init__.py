@@ -30,7 +30,7 @@ from .loss import (
     WeightedEnergyForcesDipoleLoss,
     WeightedEnergyForcesL1L2Loss,
     WeightedEnergyForcesStressDipoleLoss,
-    WeightedEnergyForcesStressLoss,
+    PESLoss,
     WeightedEnergyForcesVirialsLoss,
     WeightedHuberEnergyForcesStressLoss,
 )
@@ -107,7 +107,7 @@ __all__ = [
     "AtomicDielectricMACE",
     "EnergyDipoleMACE",
     "WeightedEnergyForcesVirialsLoss",
-    "WeightedEnergyForcesStressLoss",
+    "PESLoss",
     "WeightedEnergyForcesStressDipoleLoss",
     "DipoleSingleLoss",
     "WeightedEnergyForcesDipoleLoss",
