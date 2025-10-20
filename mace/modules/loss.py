@@ -490,7 +490,7 @@ class UniversalLoss(torch.nn.Module):
 
 
 class DielectricLoss(torch.nn.Module):
-    def __init__(self, dipole_weight=0.0,polarizability_weight=0.0) -> None:
+    def __init__(self, dipole_weight=0.0, polarizability_weight=0.0) -> None:
         super().__init__()
         self.register_buffer(
             "dipole_weight",
@@ -506,9 +506,15 @@ class DielectricLoss(torch.nn.Module):
     ) -> torch.Tensor:
         loss = torch.tensor(0.0)
         if self.dipole_weight > 0.0:
-            loss = loss + self.dipole_weight * weighted_mean_squared_error_dipole(ref, pred, ddp)
+            loss = loss + self.dipole_weight * weighted_mean_squared_error_dipole(
+                ref, pred, ddp
+            )
         if self.polarizability_weight > 0.0:
-            loss = loss + self.polarizability_weight * weighted_mean_squared_error_polarizability(ref, pred, ddp)
+            loss = (
+                loss
+                + self.polarizability_weight
+                * weighted_mean_squared_error_polarizability(ref, pred, ddp)
+            )
         return loss
 
     def __repr__(self):
@@ -516,7 +522,6 @@ class DielectricLoss(torch.nn.Module):
             f"{self.__class__.__name__}("
             f"dipole_weight={self.dipole_weight:.2e}, polarizability_weight={self.polarizability_weight:.2e})"
         )
-
 
 
 class WeightedEnergyForcesDipoleLoss(torch.nn.Module):
