@@ -39,6 +39,16 @@ def fixture_fitting_configs():
     fit_configs[0].info["config_type"] = "IsolatedAtom"
     fit_configs[1].info["REF_energy"] = 0.0
     fit_configs[1].info["config_type"] = "IsolatedAtom"
+    
+    np.random.seed(0)
+    c = water.copy()
+    c.positions += np.random.normal(0.1, size=c.positions.shape)
+    c.info["REF_energy"] = np.nan
+    c.new_array("REF_forces", np.full(c.positions.shape,np.nan))
+    c.info["REF_stress"] = np.full(6,np.nan)
+    c.info["REF_dipoles"] = np.full(3,np.nan)
+    c.info["REF_polarizability"] = np.full((3,3),np.nan)
+    fit_configs.append(c)
 
     np.random.seed(5)
     for _ in range(20):
@@ -151,7 +161,7 @@ def test_run_train_dipole(tmp_path, fitting_configs):
     )
 
     Mus = []
-    for at in fitting_configs:
+    for at in fitting_configs[:2] + fitting_configs[4:]:
         at.calc = calc
         Mus.append(at.get_dipole_moment())
 
@@ -254,7 +264,7 @@ def test_run_train_dipole_polar(tmp_path, fitting_configs):
 
     Mus = []
     alphas = []
-    for at in fitting_configs:
+    for at in fitting_configs[:2] + fitting_configs[4:]:
         at.calc = calc
         Mus.append(at.get_dipole_moment())
         alphas.append(calc.get_property("polarizability", at))
@@ -431,3 +441,6 @@ def test_run_train_dipole_polar(tmp_path, fitting_configs):
 
     assert np.allclose(Mus, ref_Mus)
     assert np.allclose(alphas, ref_alphas)
+
+if __name__ == "__main__":
+    pytest.main([__file__])
