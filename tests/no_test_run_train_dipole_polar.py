@@ -1,4 +1,3 @@
-import json
 import os
 import subprocess
 import sys
@@ -7,11 +6,9 @@ from pathlib import Path
 import ase.io
 import numpy as np
 import pytest
-import torch
 from ase.atoms import Atoms
-from ase.calculators.singlepoint import SinglePointCalculator
 
-from mace.calculators import MACECalculator, mace_mp
+from mace.calculators import MACECalculator
 
 try:
     import cuequivariance as cue  # pylint: disable=unused-import
@@ -22,9 +19,16 @@ except ImportError:
 
 run_train = Path(__file__).parent.parent / "mace" / "cli" / "run_train.py"
 
-
+# ----------------------------- #
 @pytest.fixture(name="fitting_configs")
 def fixture_fitting_configs():
+    return _fitting_config(False)
+
+@pytest.fixture(name="fitting_configs_nan")
+def fixture_fitting_configs_nan():
+    return _fitting_config(True)
+
+def _fitting_config(with_nan=False):
     water = Atoms(
         numbers=[8, 1, 1],
         positions=[[0, -2.0, 0], [1, 0, 0], [0, 1, 0]],
@@ -40,15 +44,16 @@ def fixture_fitting_configs():
     fit_configs[1].info["REF_energy"] = 0.0
     fit_configs[1].info["config_type"] = "IsolatedAtom"
     
-    np.random.seed(0)
-    c = water.copy()
-    c.positions += np.random.normal(0.1, size=c.positions.shape)
-    c.info["REF_energy"] = np.nan
-    c.new_array("REF_forces", np.full(c.positions.shape,np.nan))
-    c.info["REF_stress"] = np.full(6,np.nan)
-    c.info["REF_dipoles"] = np.full(3,np.nan)
-    c.info["REF_polarizability"] = np.full((3,3),np.nan)
-    fit_configs.append(c)
+    if with_nan:
+        np.random.seed(0)
+        c = water.copy()
+        c.positions += np.random.normal(0.1, size=c.positions.shape)
+        c.info["REF_energy"] = np.nan
+        c.new_array("REF_forces", np.full(c.positions.shape,np.nan))
+        c.info["REF_stress"] = np.full(6,np.nan)
+        c.info["REF_dipoles"] = np.full(3,np.nan)
+        c.info["REF_polarizability"] = np.full((3,3),np.nan)
+        fit_configs.append(c)
 
     np.random.seed(5)
     for _ in range(20):
@@ -94,7 +99,7 @@ def fixture_pretraining_configs():
     configs[-1].info["config_type"] = "IsolatedAtom"
     return configs
 
-
+# ----------------------------- #
 _mace_params_dipole = {
     "name": "DipolesMACE",
     "valid_fraction": 0.05,
@@ -125,6 +130,12 @@ _mace_params_dipole = {
 
 
 def test_run_train_dipole(tmp_path, fitting_configs):
+    _run_train_dipole(tmp_path, fitting_configs,True)
+    
+def test_run_train_dipole_nan(tmp_path, fitting_configs_nan):
+    _run_train_dipole(tmp_path, fitting_configs_nan,False)
+    
+def _run_train_dipole(tmp_path, fitting_configs,compare):
     ase.io.write(tmp_path / "fit.xyz", fitting_configs)
 
     mace_params = _mace_params_dipole.copy()
@@ -161,9 +172,12 @@ def test_run_train_dipole(tmp_path, fitting_configs):
     )
 
     Mus = []
-    for at in fitting_configs[:2] + fitting_configs[4:]:
+    for at in fitting_configs:
         at.calc = calc
         Mus.append(at.get_dipole_moment())
+        
+    if not compare:
+        return
 
     print("Mus", Mus)
     # Obtained for MACE from the 08/08/2025
@@ -194,7 +208,7 @@ def test_run_train_dipole(tmp_path, fitting_configs):
 
     assert np.allclose(Mus, ref_Mus)
 
-
+# # ----------------------------- #
 _mace_params_dipole_polar = {
     "name": "DielectricMACE",
     "valid_fraction": 0.05,
@@ -227,6 +241,12 @@ _mace_params_dipole_polar = {
 
 
 def test_run_train_dipole_polar(tmp_path, fitting_configs):
+    _run_train_dipole_polar(tmp_path, fitting_configs,True)
+    
+def test_run_train_dipole_polar_nan(tmp_path, fitting_configs_nan):
+    _run_train_dipole_polar(tmp_path, fitting_configs_nan,False)
+    
+def _run_train_dipole_polar(tmp_path, fitting_configs,compare):
     ase.io.write(tmp_path / "fit.xyz", fitting_configs)
 
     mace_params = _mace_params_dipole_polar.copy()
@@ -264,10 +284,14 @@ def test_run_train_dipole_polar(tmp_path, fitting_configs):
 
     Mus = []
     alphas = []
-    for at in fitting_configs[:2] + fitting_configs[4:]:
+    for at in fitting_configs:
         at.calc = calc
         Mus.append(at.get_dipole_moment())
         alphas.append(calc.get_property("polarizability", at))
+        
+    if not compare:
+        return
+    
     # Obtained for MACE from the 08/08/2025
     ref_Mus = [
         np.array([0.0, 0.0, 0.0]),
