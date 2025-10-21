@@ -22,9 +22,7 @@ except ImportError:
 
 run_train = Path(__file__).parent.parent / "mace" / "cli" / "run_train.py"
 
-
-@pytest.fixture(name="fitting_configs")
-def fixture_fitting_configs():
+def _fitting_config(with_nan: bool = False):
     water = Atoms(
         numbers=[8, 1, 1],
         positions=[[0, -2.0, 0], [1, 0, 0], [0, 1, 0]],
@@ -40,13 +38,14 @@ def fixture_fitting_configs():
     fit_configs[1].info["REF_energy"] = 0.0
     fit_configs[1].info["config_type"] = "IsolatedAtom"
     
-    np.random.seed(0)
-    c = water.copy()
-    c.positions += np.random.normal(0.1, size=c.positions.shape)
-    c.info["REF_energy"] = np.nan
-    c.new_array("REF_forces", np.full(c.positions.shape,np.nan))
-    c.info["REF_stress"] = np.full(6,np.nan)
-    fit_configs.append(c)
+    if with_nan:
+        np.random.seed(0)
+        c = water.copy()
+        c.positions += np.random.normal(0.1, size=c.positions.shape)
+        c.info["REF_energy"] = np.nan
+        c.new_array("REF_forces", np.full(c.positions.shape,np.nan))
+        c.info["REF_stress"] = np.full(6,np.nan)
+        fit_configs.append(c)
 
     np.random.seed(5)
     for _ in range(20):
@@ -55,10 +54,18 @@ def fixture_fitting_configs():
         c.info["REF_energy"] = np.random.normal(0.1)
         print(c.info["REF_energy"])
         c.new_array("REF_forces", np.random.normal(0.1, size=c.positions.shape))
-        c.info["REF_stress"] = np.random.normal(0.1, size=6)
+        c.info["REF_stress"] = np.random.normal(0.1, size=6)        
         fit_configs.append(c)
 
     return fit_configs
+
+@pytest.fixture(name="fitting_configs_nan")
+def fixture_fitting_configs_nan():
+    return _fitting_config(with_nan=True)
+
+@pytest.fixture(name="fitting_configs")
+def fixture_fitting_configs():
+    return _fitting_config(with_nan=False)
 
 @pytest.fixture(name="pretraining_configs")
 def fixture_pretraining_configs():
@@ -85,7 +92,6 @@ def fixture_pretraining_configs():
     configs[-1].info["REF_energy"] = -4.0
     configs[-1].info["config_type"] = "IsolatedAtom"
     return configs
-
 
 _mace_params = {
     "name": "MACE",
@@ -114,9 +120,15 @@ _mace_params = {
     "use_reduced_cg": False,
 }
 
-
+# ----------------------------- # 
 def test_run_train(tmp_path, fitting_configs):
-    ase.io.write(tmp_path / "fit.xyz", fitting_configs)
+    _run_train(tmp_path, fitting_configs, compare=True)
+
+def test_run_train_nan(tmp_path, fitting_configs_nan):
+    _run_train(tmp_path, fitting_configs_nan, compare=False)
+
+def _run_train(tmp_path:str, configs:str,compare:bool):
+    ase.io.write(tmp_path / "fit.xyz", configs)
 
     mace_params = _mace_params.copy()
     mace_params["checkpoints_dir"] = str(tmp_path)
@@ -148,11 +160,15 @@ def test_run_train(tmp_path, fitting_configs):
     calc = MACECalculator(model_paths=tmp_path / "MACE.model", device="cpu")
 
     Es = []
-    for at in fitting_configs[:2] + fitting_configs[4:]:
+    for at in configs: # [:2] + fitting_configs[3:]:
         at.calc = calc
         Es.append(at.get_potential_energy())
 
     print("Es", Es)
+    
+    if not compare:
+        return
+    
     # from a run on 04/06/2024 on stress_bugfix 967f0bfb6490086599da247874b24595d149caa7
     ref_Es = [
         0.0,
@@ -180,14 +196,20 @@ def test_run_train(tmp_path, fitting_configs):
     ]
 
     assert np.allclose(Es, ref_Es)
-
-
+ 
+# ----------------------------- #   
 def test_run_train_missing_data(tmp_path, fitting_configs):
-    del fitting_configs[5].info["REF_energy"]
-    del fitting_configs[6].arrays["REF_forces"]
-    del fitting_configs[7].info["REF_stress"]
+    _run_train_missing_data(tmp_path,fitting_configs,True)
+    
+def test_run_train_missing_data_nan(tmp_path, fitting_configs_nan):
+    _run_train_missing_data(tmp_path,fitting_configs_nan,False)
+    
+def _run_train_missing_data(tmp_path, configs,compare):
+    del configs[5].info["REF_energy"]
+    del configs[6].arrays["REF_forces"]
+    del configs[7].info["REF_stress"]
 
-    ase.io.write(tmp_path / "fit.xyz", fitting_configs)
+    ase.io.write(tmp_path / "fit.xyz", configs)
 
     mace_params = _mace_params.copy()
     mace_params["checkpoints_dir"] = str(tmp_path)
@@ -219,9 +241,12 @@ def test_run_train_missing_data(tmp_path, fitting_configs):
     calc = MACECalculator(model_paths=tmp_path / "MACE.model", device="cpu")
 
     Es = []
-    for at in fitting_configs[:2]+fitting_configs[4:]:
+    for at in configs:
         at.calc = calc
         Es.append(at.get_potential_energy())
+        
+    if not compare:
+        return
 
     print("Es", Es)
     # from a run on 04/06/2024 on stress_bugfix 967f0bfb6490086599da247874b24595d149caa7
@@ -251,13 +276,18 @@ def test_run_train_missing_data(tmp_path, fitting_configs):
     ]
     assert np.allclose(Es, ref_Es)
 
-
+# ----------------------------- #
 def test_run_train_no_stress(tmp_path, fitting_configs):
-    del fitting_configs[5].info["REF_energy"]
-    del fitting_configs[6].arrays["REF_forces"]
-    del fitting_configs[7].info["REF_stress"]
+    _run_train_no_stress(tmp_path, fitting_configs,True)
+def test_run_train_no_stress_nan(tmp_path, fitting_configs_nan):
+    _run_train_no_stress(tmp_path, fitting_configs_nan,False)
+    
+def _run_train_no_stress(tmp_path, configs,compare):
+    del configs[5].info["REF_energy"]
+    del configs[6].arrays["REF_forces"]
+    del configs[7].info["REF_stress"]
 
-    ase.io.write(tmp_path / "fit.xyz", fitting_configs)
+    ase.io.write(tmp_path / "fit.xyz", configs)
 
     mace_params = _mace_params.copy()
     mace_params["checkpoints_dir"] = str(tmp_path)
@@ -290,9 +320,12 @@ def test_run_train_no_stress(tmp_path, fitting_configs):
     calc = MACECalculator(model_paths=tmp_path / "MACE.model", device="cpu")
 
     Es = []
-    for at in fitting_configs[:2]+fitting_configs[4:]:
+    for at in configs:
         at.calc = calc
         Es.append(at.get_potential_energy())
+        
+    if not compare:
+        return
 
     print("Es", Es)
     # from a run on 28/03/2023 on main 88d49f9ed6925dec07d1777043a36e1fe4872ff3
@@ -322,7 +355,7 @@ def test_run_train_no_stress(tmp_path, fitting_configs):
     ]
     assert np.allclose(Es, ref_Es)
 
-
+# ----------------------------- #
 def test_run_train_multihead(tmp_path, fitting_configs):
     fitting_configs_dft = []
     fitting_configs_mp2 = []
@@ -401,7 +434,7 @@ def test_run_train_multihead(tmp_path, fitting_configs):
     )
 
     Es = []
-    for at in fitting_configs[:2]+fitting_configs[4:]:
+    for at in fitting_configs:
         at.calc = calc
         Es.append(at.get_potential_energy())
 
@@ -433,7 +466,7 @@ def test_run_train_multihead(tmp_path, fitting_configs):
     ]
     assert np.allclose(Es, ref_Es)
 
-
+# ----------------------------- #
 def test_run_train_foundation(tmp_path, fitting_configs):
     ase.io.write(tmp_path / "fit.xyz", fitting_configs)
 
@@ -475,7 +508,7 @@ def test_run_train_foundation(tmp_path, fitting_configs):
     )
 
     Es = []
-    for at in fitting_configs[:2]+fitting_configs[4:]:
+    for at in fitting_configs:
         at.calc = calc
         Es.append(at.get_potential_energy())
 
@@ -507,7 +540,7 @@ def test_run_train_foundation(tmp_path, fitting_configs):
     ]
     assert np.allclose(Es, ref_Es)
 
-
+# ----------------------------- #
 def test_run_train_foundation_multihead(tmp_path, fitting_configs):
     fitting_configs_dft = []
     fitting_configs_mp2 = []
@@ -596,7 +629,7 @@ def test_run_train_foundation_multihead(tmp_path, fitting_configs):
     assert completed_process.returncode == 0
 
     Es = []
-    for at in fitting_configs[:2]+fitting_configs[4:]:
+    for at in fitting_configs:
         config_head = at.info.get("head", "MP2")
         calc = MACECalculator(
             model_paths=tmp_path / "MACE.model",
@@ -635,7 +668,7 @@ def test_run_train_foundation_multihead(tmp_path, fitting_configs):
     ]
     assert np.allclose(Es, ref_Es, atol=1e-1)
 
-
+# ----------------------------- #
 def test_run_train_foundation_multihead_json(tmp_path, fitting_configs):
     fitting_configs_dft = []
     fitting_configs_mp2 = []
@@ -733,7 +766,7 @@ def test_run_train_foundation_multihead_json(tmp_path, fitting_configs):
     assert completed_process.returncode == 0
 
     Es = []
-    for at in fitting_configs[:2]+fitting_configs[4:]:
+    for at in fitting_configs:
         config_head = at.info.get("head", "MP2")
         calc = MACECalculator(
             model_paths=tmp_path / "MACE.model",
@@ -772,7 +805,7 @@ def test_run_train_foundation_multihead_json(tmp_path, fitting_configs):
     ]
     assert np.allclose(Es, ref_Es, atol=1e-1)
 
-
+# ----------------------------- #
 def test_run_train_multihead_replay_custom_finetuning(
     tmp_path, fitting_configs, pretraining_configs
 ):
@@ -896,7 +929,7 @@ def test_run_train_multihead_replay_custom_finetuning(
     )
 
     Es = []
-    for at in fitting_configs[:2]+fitting_configs[4:]:
+    for at in fitting_configs:
         at.calc = calc
         Es.append(at.get_potential_energy())
 
@@ -1103,7 +1136,7 @@ def test_run_train_foundation_multihead_json_cueq(tmp_path, fitting_configs):
     )
 
     Es = []
-    for at in fitting_configs[:2]+fitting_configs[4:]:
+    for at in fitting_configs:
         at.calc = calc
         Es.append(at.get_potential_energy())
 
@@ -1171,7 +1204,7 @@ def test_run_train_lbfgs(tmp_path, fitting_configs):
     calc = MACECalculator(model_paths=tmp_path / "MACE.model", device="cpu")
 
     Es = []
-    for at in fitting_configs[:2]+fitting_configs[4:]:
+    for at in fitting_configs:
         at.calc = calc
         Es.append(at.get_potential_energy())
 
@@ -1558,7 +1591,7 @@ def test_run_train_foundation_multihead_pseudolabeling(tmp_path, fitting_configs
     assert completed_process.returncode == 0
 
     Es = []
-    for at in fitting_configs[:2]+fitting_configs[4:]:
+    for at in fitting_configs:
         config_head = at.info.get("head", "MP2")
         calc = MACECalculator(
             model_paths=tmp_path / "MACE.model",
