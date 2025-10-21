@@ -39,6 +39,14 @@ def fixture_fitting_configs():
     fit_configs[0].info["config_type"] = "IsolatedAtom"
     fit_configs[1].info["REF_energy"] = 0.0
     fit_configs[1].info["config_type"] = "IsolatedAtom"
+    
+    np.random.seed(0)
+    c = water.copy()
+    c.positions += np.random.normal(0.1, size=c.positions.shape)
+    c.info["REF_energy"] = np.nan
+    c.new_array("REF_forces", np.full(c.positions.shape,np.nan))
+    c.info["REF_stress"] = np.full(6,np.nan)
+    fit_configs.append(c)
 
     np.random.seed(5)
     for _ in range(20):
@@ -51,7 +59,6 @@ def fixture_fitting_configs():
         fit_configs.append(c)
 
     return fit_configs
-
 
 @pytest.fixture(name="pretraining_configs")
 def fixture_pretraining_configs():
@@ -141,7 +148,7 @@ def test_run_train(tmp_path, fitting_configs):
     calc = MACECalculator(model_paths=tmp_path / "MACE.model", device="cpu")
 
     Es = []
-    for at in fitting_configs:
+    for at in fitting_configs[:2] + fitting_configs[4:]:
         at.calc = calc
         Es.append(at.get_potential_energy())
 
@@ -212,7 +219,7 @@ def test_run_train_missing_data(tmp_path, fitting_configs):
     calc = MACECalculator(model_paths=tmp_path / "MACE.model", device="cpu")
 
     Es = []
-    for at in fitting_configs:
+    for at in fitting_configs[:2]+fitting_configs[4:]:
         at.calc = calc
         Es.append(at.get_potential_energy())
 
@@ -283,7 +290,7 @@ def test_run_train_no_stress(tmp_path, fitting_configs):
     calc = MACECalculator(model_paths=tmp_path / "MACE.model", device="cpu")
 
     Es = []
-    for at in fitting_configs:
+    for at in fitting_configs[:2]+fitting_configs[4:]:
         at.calc = calc
         Es.append(at.get_potential_energy())
 
@@ -394,7 +401,7 @@ def test_run_train_multihead(tmp_path, fitting_configs):
     )
 
     Es = []
-    for at in fitting_configs:
+    for at in fitting_configs[:2]+fitting_configs[4:]:
         at.calc = calc
         Es.append(at.get_potential_energy())
 
@@ -468,7 +475,7 @@ def test_run_train_foundation(tmp_path, fitting_configs):
     )
 
     Es = []
-    for at in fitting_configs:
+    for at in fitting_configs[:2]+fitting_configs[4:]:
         at.calc = calc
         Es.append(at.get_potential_energy())
 
@@ -589,7 +596,7 @@ def test_run_train_foundation_multihead(tmp_path, fitting_configs):
     assert completed_process.returncode == 0
 
     Es = []
-    for at in fitting_configs:
+    for at in fitting_configs[:2]+fitting_configs[4:]:
         config_head = at.info.get("head", "MP2")
         calc = MACECalculator(
             model_paths=tmp_path / "MACE.model",
@@ -726,7 +733,7 @@ def test_run_train_foundation_multihead_json(tmp_path, fitting_configs):
     assert completed_process.returncode == 0
 
     Es = []
-    for at in fitting_configs:
+    for at in fitting_configs[:2]+fitting_configs[4:]:
         config_head = at.info.get("head", "MP2")
         calc = MACECalculator(
             model_paths=tmp_path / "MACE.model",
@@ -889,7 +896,7 @@ def test_run_train_multihead_replay_custom_finetuning(
     )
 
     Es = []
-    for at in fitting_configs:
+    for at in fitting_configs[:2]+fitting_configs[4:]:
         at.calc = calc
         Es.append(at.get_potential_energy())
 
@@ -1096,7 +1103,7 @@ def test_run_train_foundation_multihead_json_cueq(tmp_path, fitting_configs):
     )
 
     Es = []
-    for at in fitting_configs:
+    for at in fitting_configs[:2]+fitting_configs[4:]:
         at.calc = calc
         Es.append(at.get_potential_energy())
 
@@ -1164,7 +1171,7 @@ def test_run_train_lbfgs(tmp_path, fitting_configs):
     calc = MACECalculator(model_paths=tmp_path / "MACE.model", device="cpu")
 
     Es = []
-    for at in fitting_configs:
+    for at in fitting_configs[:2]+fitting_configs[4:]:
         at.calc = calc
         Es.append(at.get_potential_energy())
 
@@ -1551,7 +1558,7 @@ def test_run_train_foundation_multihead_pseudolabeling(tmp_path, fitting_configs
     assert completed_process.returncode == 0
 
     Es = []
-    for at in fitting_configs:
+    for at in fitting_configs[:2]+fitting_configs[4:]:
         config_head = at.info.get("head", "MP2")
         calc = MACECalculator(
             model_paths=tmp_path / "MACE.model",
@@ -1908,3 +1915,6 @@ def test_run_train_real_pt_data_ratio(
     ]
     assert len(l_ratio) == 1
     assert l_ratio[0].strip().endswith(" 1")
+
+if __name__ == "__main__":
+    pytest.main([__file__])
