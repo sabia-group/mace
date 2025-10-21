@@ -4,7 +4,7 @@
 # This program is distributed under the MIT License (see MIT.md)
 ###########################################################################################
 
-from typing import Optional, Callable
+from typing import Callable, Optional
 
 import torch
 import torch.distributed as dist
