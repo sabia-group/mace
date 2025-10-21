@@ -4,7 +4,7 @@
 # This program is distributed under the MIT License (see MIT.md)
 ###########################################################################################
 
-from typing import Optional
+from typing import Optional, Callable
 
 import torch
 import torch.distributed as dist
@@ -22,44 +22,68 @@ def is_ddp_enabled():
 
 def reduce_loss(raw_loss: torch.Tensor, ddp: Optional[bool] = None) -> torch.Tensor:
     """
-    Reduces an element-wise loss tensor, handling NaN values.
+    Reduces an element-wise loss tensor.
 
     If ddp is True and distributed is initialized, the function computes:
 
         loss = (local_sum * world_size) / global_num_elements
 
-    Otherwise, it returns the regular mean of the valid (non-NaN) entries.
+    Otherwise, it returns the regular mean.
     """
     ddp = is_ddp_enabled() if ddp is None else ddp
-
-    # Mask out NaNs
-    valid_mask = ~torch.isnan(raw_loss)
-    valid_loss = raw_loss[valid_mask]
-
-    if valid_loss.numel() == 0:
-        # Handle case where all entries are NaN
-        return torch.tensor(0.0, device=raw_loss.device, dtype=raw_loss.dtype)
-
-    local_sum = valid_loss.sum()
-    local_count = valid_loss.numel()
-
     if ddp and dist.is_initialized():
-        world_sum = local_sum.clone()
-        world_count = torch.tensor(
-            local_count, device=raw_loss.device, dtype=raw_loss.dtype
+        world_size = dist.get_world_size()
+        n_local = raw_loss.numel()
+        loss_sum = raw_loss.sum()
+        total_samples = torch.tensor(
+            n_local, device=raw_loss.device, dtype=raw_loss.dtype
+        )
+        dist.all_reduce(total_samples, op=dist.ReduceOp.SUM)
+        return loss_sum * world_size / total_samples
+    return raw_loss.mean()
+
+
+# ------------------------------------------------------------------------------
+# double where trick
+# - https://github.com/pytorch/pytorch/issues/156212
+# - https://docs.jax.dev/en/latest/faq.html#gradients-contain-nan-where-using-where
+# - https://github.com/tensorflow/probability/blob/main/discussion/where-nan.pdf
+# ------------------------------------------------------------------------------
+def general_loss_with_nan(
+    ref_weight: torch.Tensor,
+    quantity_weight: torch.Tensor,
+    ref: torch.Tensor,
+    pred: torch.Tensor,
+    func: Callable[[torch.Tensor], torch.Tensor],
+    num_atoms: Optional[torch.Tensor] = None,
+) -> torch.Tensor:
+    # Create mask: True where all elements along non-batch dims are valid
+    ii = ~torch.isnan(ref)
+    if ii.ndim > 1:
+        ii = ii.all(dim=tuple(range(1, ii.ndim)))  # mask along all dims except first
+
+    if not ii.any():
+        # Return zero loss if no valid entries
+        return torch.tensor(0.0, device=ref.device, dtype=ref.dtype)
+
+    # Ensure num_atoms is broadcastable or masked properly
+    if num_atoms is None:
+        num_atoms = (
+            torch.ones_like(ref[..., 0]) if ref.ndim > 1 else torch.ones_like(ref)
         )
 
-        dist.all_reduce(world_sum, op=dist.ReduceOp.SUM)
-        dist.all_reduce(world_count, op=dist.ReduceOp.SUM)
+    # Masked computation
+    safe_ref = ref[ii]
+    safe_pred = pred[ii]
+    safe_num_atoms = num_atoms[ii] if num_atoms.ndim == ii.ndim else num_atoms[ii]
 
-        # Avoid division by zero if all ranks had NaNs
-        if world_count.item() == 0:
-            return torch.tensor(0.0, device=raw_loss.device, dtype=raw_loss.dtype)
+    raw_loss = (
+        ref_weight[ii]
+        * quantity_weight[ii]
+        * func((safe_ref - safe_pred) / safe_num_atoms)
+    )
 
-        return world_sum / world_count
-
-    # Non-DDP: just mean over valid entries
-    return local_sum / local_count
+    return raw_loss
 
 
 # ------------------------------------------------------------------------------
@@ -79,11 +103,20 @@ def weighted_mean_squared_error_energy(
 ) -> torch.Tensor:
     # Calculate per-graph number of atoms.
     num_atoms = ref.ptr[1:] - ref.ptr[:-1]  # shape: [n_graphs]
-    raw_loss = (
-        ref.weight
-        * ref.energy_weight
-        * torch.square((ref["energy"] - pred["energy"]) / num_atoms)
+    raw_loss = general_loss_with_nan(
+        ref.weight,
+        ref.energy_weight,
+        ref["energy"],
+        pred["energy"],
+        torch.square,
+        num_atoms,
     )
+    # ii = ~torch.isnan(ref["energy"])
+    # raw_loss = (
+    #     ref.weight[ii]
+    #     * ref.energy_weight[ii]
+    #     * torch.square((ref["energy"][ii] - pred["energy"][ii]) / num_atoms[ii])
+    # )
     return reduce_loss(raw_loss, ddp)
 
 
@@ -91,11 +124,19 @@ def weighted_mean_absolute_error_energy(
     ref: Batch, pred: TensorDict, ddp: Optional[bool] = None
 ) -> torch.Tensor:
     num_atoms = ref.ptr[1:] - ref.ptr[:-1]
-    raw_loss = (
-        ref.weight
-        * ref.energy_weight
-        * torch.abs((ref["energy"] - pred["energy"]) / num_atoms)
+    raw_loss = general_loss_with_nan(
+        ref.weight,
+        ref.energy_weight,
+        ref["energy"],
+        pred["energy"],
+        torch.abs,
+        num_atoms,
     )
+    # raw_loss = (
+    #     ref.weight
+    #     * ref.energy_weight
+    #     * torch.abs((ref["energy"] - pred["energy"]) / num_atoms)
+    # )
     return reduce_loss(raw_loss, ddp)
 
 
@@ -109,11 +150,19 @@ def weighted_mean_squared_stress(
 ) -> torch.Tensor:
     configs_weight = ref.weight.view(-1, 1, 1)
     configs_stress_weight = ref.stress_weight.view(-1, 1, 1)
-    raw_loss = (
-        configs_weight
-        * configs_stress_weight
-        * torch.square(ref["stress"] - pred["stress"])
+    raw_loss = general_loss_with_nan(
+        configs_weight,
+        configs_stress_weight,
+        ref["stress"],
+        pred["stress"],
+        torch.square,
     )
+    # ii = ~torch.isnan(ref["stress"])
+    # raw_loss = (
+    #     configs_weight
+    #     * configs_stress_weight
+    #     * torch.square(ref["stress"] - pred["stress"])
+    # )[ii]
     return reduce_loss(raw_loss, ddp)
 
 
@@ -123,11 +172,20 @@ def weighted_mean_squared_virials(
     configs_weight = ref.weight.view(-1, 1, 1)
     configs_virials_weight = ref.virials_weight.view(-1, 1, 1)
     num_atoms = (ref.ptr[1:] - ref.ptr[:-1]).view(-1, 1, 1)
-    raw_loss = (
-        configs_weight
-        * configs_virials_weight
-        * torch.square((ref["virials"] - pred["virials"]) / num_atoms)
+    raw_loss = general_loss_with_nan(
+        configs_weight,
+        configs_virials_weight,
+        ref["virials"],
+        pred["virials"],
+        torch.square,
+        num_atoms,
     )
+    # ii = ~torch.isnan(ref["virials"])
+    # raw_loss = (
+    #     configs_weight
+    #     * configs_virials_weight
+    #     * torch.square((ref["virials"] - pred["virials"]) / num_atoms)
+    # )[ii]
     return reduce_loss(raw_loss, ddp)
 
 
@@ -146,11 +204,19 @@ def mean_squared_error_forces(
     configs_forces_weight = torch.repeat_interleave(
         ref.forces_weight, ref.ptr[1:] - ref.ptr[:-1]
     ).unsqueeze(-1)
-    raw_loss = (
-        configs_weight
-        * configs_forces_weight
-        * torch.square(ref["forces"] - pred["forces"])
+    raw_loss = general_loss_with_nan(
+        configs_weight,
+        configs_forces_weight,
+        ref["forces"],
+        pred["forces"],
+        torch.square,
     )
+    # ii = ~torch.isnan(ref["forces"]).any(dim=-1)
+    # raw_loss = (
+    #     configs_weight[ii]
+    #     * configs_forces_weight[ii]
+    #     * torch.square(ref["forces"][ii] - pred["forces"][ii])
+    # )
     return reduce_loss(raw_loss, ddp)
 
 
@@ -170,7 +236,15 @@ def weighted_mean_squared_error_dipole(
     ref: Batch, pred: TensorDict, ddp: Optional[bool] = None
 ) -> torch.Tensor:
     num_atoms = (ref.ptr[1:] - ref.ptr[:-1]).unsqueeze(-1)
-    raw_loss = torch.square((ref["dipole"] - pred["dipole"]) / num_atoms)
+    raw_loss = general_loss_with_nan(
+        ref.weight,
+        ref.dipole_weight,
+        ref["dipole"],
+        pred["dipole"],
+        torch.square,
+        num_atoms,
+    )
+    # raw_loss = torch.square((ref["dipole"] - pred["dipole"]) / num_atoms)
     return reduce_loss(raw_loss, ddp)
 
 
@@ -484,41 +558,6 @@ class UniversalLoss(torch.nn.Module):
         return (
             f"{self.__class__.__name__}(energy_weight={self.energy_weight:.3f}, "
             f"forces_weight={self.forces_weight:.3f}, stress_weight={self.stress_weight:.3f})"
-        )
-
-
-class DielectricLoss(torch.nn.Module):
-    def __init__(self, dipole_weight=0.0, polarizability_weight=0.0) -> None:
-        super().__init__()
-        self.register_buffer(
-            "dipole_weight",
-            torch.tensor(dipole_weight, dtype=torch.get_default_dtype()),
-        )
-        self.register_buffer(
-            "polarizability_weight",
-            torch.tensor(polarizability_weight, dtype=torch.get_default_dtype()),
-        )
-
-    def forward(
-        self, ref: Batch, pred: TensorDict, ddp: Optional[bool] = None
-    ) -> torch.Tensor:
-        loss = torch.tensor(0.0, dtype=torch.get_default_dtype())
-        if self.dipole_weight > 0.0:
-            loss = loss + self.dipole_weight * weighted_mean_squared_error_dipole(
-                ref, pred, ddp
-            )
-        if self.polarizability_weight > 0.0:
-            loss = (
-                loss
-                + self.polarizability_weight
-                * weighted_mean_squared_error_polarizability(ref, pred, ddp)
-            )
-        return loss
-
-    def __repr__(self):
-        return (
-            f"{self.__class__.__name__}("
-            f"dipole_weight={self.dipole_weight:.2e}, polarizability_weight={self.polarizability_weight:.2e})"
         )
 
 
