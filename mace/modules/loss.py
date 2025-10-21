@@ -68,9 +68,7 @@ def general_loss_with_nan(
 
     # Ensure num_atoms is broadcastable or masked properly
     if num_atoms is None:
-        num_atoms = (
-            torch.ones_like(ref[..., 0]) if ref.ndim > 1 else torch.ones_like(ref)
-        )
+        num_atoms = torch.ones_like(ref)
 
     # Masked computation
     safe_ref = ref[ii]
@@ -237,7 +235,7 @@ def weighted_mean_squared_error_dipole(
 ) -> torch.Tensor:
     num_atoms = (ref.ptr[1:] - ref.ptr[:-1]).unsqueeze(-1)
     raw_loss = general_loss_with_nan(
-        ref.weight,
+        ref.weight.unsqueeze(-1),
         ref.dipole_weight,
         ref["dipole"],
         pred["dipole"],
