@@ -22,6 +22,15 @@ except ImportError:
 
 run_train = Path(__file__).parent.parent / "mace" / "cli" / "run_train.py"
 
+# ----------------------------- #
+@pytest.fixture(name="fitting_configs_nan")
+def fixture_fitting_configs_nan():
+    return _fitting_config(with_nan=True)
+
+@pytest.fixture(name="fitting_configs")
+def fixture_fitting_configs():
+    return _fitting_config(with_nan=False)
+
 def _fitting_config(with_nan: bool = False):
     water = Atoms(
         numbers=[8, 1, 1],
@@ -59,14 +68,7 @@ def _fitting_config(with_nan: bool = False):
 
     return fit_configs
 
-@pytest.fixture(name="fitting_configs_nan")
-def fixture_fitting_configs_nan():
-    return _fitting_config(with_nan=True)
-
-@pytest.fixture(name="fitting_configs")
-def fixture_fitting_configs():
-    return _fitting_config(with_nan=False)
-
+# ----------------------------- #
 @pytest.fixture(name="pretraining_configs")
 def fixture_pretraining_configs():
     configs = []
