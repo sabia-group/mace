@@ -187,77 +187,24 @@ class AtomicData(torch_geometric.data.Data):
             else torch.tensor(1.0, dtype=torch.get_default_dtype())
         )
 
-        energy_weight = (
-            torch.tensor(
-                config.property_weights.get("energy"), dtype=torch.get_default_dtype()
+        def get_default_weight(prop_name):
+            return (
+                torch.tensor(
+                    config.property_weights.get(prop_name),
+                    dtype=torch.get_default_dtype(),
+                )
+                if config.property_weights.get(prop_name) is not None
+                else torch.tensor(1.0, dtype=torch.get_default_dtype())
             )
-            if config.property_weights.get("energy") is not None
-            else torch.tensor(1.0, dtype=torch.get_default_dtype())
-        )
 
-        forces_weight = (
-            torch.tensor(
-                config.property_weights.get("forces"), dtype=torch.get_default_dtype()
-            )
-            if config.property_weights.get("forces") is not None
-            else torch.tensor(1.0, dtype=torch.get_default_dtype())
-        )
+        energy_weight = get_default_weight("energy")
+        forces_weight = get_default_weight("forces")
+        stress_weight = get_default_weight("stress")
+        virials_weight = get_default_weight("virials")
+        dipole_weight = get_default_weight("dipole")
+        charges_weight = get_default_weight("charges")
+        polarizability_weight = get_default_weight("polarizability")
 
-        stress_weight = (
-            torch.tensor(
-                config.property_weights.get("stress"), dtype=torch.get_default_dtype()
-            )
-            if config.property_weights.get("stress") is not None
-            else torch.tensor(1.0, dtype=torch.get_default_dtype())
-        )
-
-        virials_weight = (
-            torch.tensor(
-                config.property_weights.get("virials"), dtype=torch.get_default_dtype()
-            )
-            if config.property_weights.get("virials") is not None
-            else torch.tensor(1.0, dtype=torch.get_default_dtype())
-        )
-
-        dipole_weight = (
-            torch.tensor(
-                config.property_weights.get("dipole"), dtype=torch.get_default_dtype()
-            )
-            if config.property_weights.get("dipole") is not None
-            else torch.tensor([[1.0, 1.0, 1.0]], dtype=torch.get_default_dtype())
-        )
-        if len(dipole_weight.shape) == 0:
-            dipole_weight = dipole_weight * torch.tensor(
-                [[1.0, 1.0, 1.0]], dtype=torch.get_default_dtype()
-            )
-        elif len(dipole_weight.shape) == 1:
-            dipole_weight = dipole_weight.unsqueeze(0)
-
-        charges_weight = (
-            torch.tensor(
-                config.property_weights.get("charges"), dtype=torch.get_default_dtype()
-            )
-            if config.property_weights.get("charges") is not None
-            else torch.tensor(1.0, dtype=torch.get_default_dtype())
-        )
-        polarizability_weight = (
-            torch.tensor(
-                config.property_weights.get("polarizability"),
-                dtype=torch.get_default_dtype(),
-            )
-            if config.property_weights.get("polarizability") is not None
-            else torch.tensor(
-                [[[1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]]],
-                dtype=torch.get_default_dtype(),
-            )
-        )
-        if len(polarizability_weight.shape) == 0:
-            polarizability_weight = polarizability_weight * torch.tensor(
-                [[[1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]]],
-                dtype=torch.get_default_dtype(),
-            )
-        elif len(polarizability_weight.shape) == 2:
-            polarizability_weight = polarizability_weight.unsqueeze(0)
         forces = (
             torch.tensor(
                 config.properties.get("forces"), dtype=torch.get_default_dtype()
