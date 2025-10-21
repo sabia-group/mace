@@ -77,8 +77,7 @@ class AtomicData(torch_geometric.data.Data):
         elec_temp: Optional[torch.Tensor],  # [,]
         total_charge: Optional[torch.Tensor] = None,  # [,]
         total_spin: Optional[torch.Tensor] = None,  # [,]
-        pbc: Optional[torch.Tensor] = None,  # [, 3]
-        oxn: Optional[torch.Tensor] = None,  # [n_nodes, ]
+        pbc: Optional[torch.Tensor] = None, # [, 3]
     ):
         # Check shapes
         num_nodes = node_attrs.shape[0]
@@ -103,13 +102,11 @@ class AtomicData(torch_geometric.data.Data):
         assert virials is None or virials.shape == (1, 3, 3)
         assert dipole is None or dipole.shape[-1] == 3
         assert charges is None or charges.shape == (num_nodes,)
-        assert oxn is None or oxn.shape == (num_nodes,)
         assert elec_temp is None or len(elec_temp.shape) == 0
         assert total_charge is None or len(total_charge.shape) == 0
         assert total_spin is None or len(total_spin.shape) == 0
         assert polarizability is None or polarizability.shape == (1, 3, 3)
         assert pbc is None or (pbc.shape[-1] == 3 and pbc.dtype == torch.bool)
-
         # Aggregate data
         data = {
             "num_nodes": num_nodes,
@@ -134,7 +131,6 @@ class AtomicData(torch_geometric.data.Data):
             "virials": virials,
             "dipole": dipole,
             "charges": charges,
-            "oxn": oxn,
             "polarizability": polarizability,
             "elec_temp": elec_temp,
             "total_charge": total_charge,
@@ -160,7 +156,6 @@ class AtomicData(torch_geometric.data.Data):
             pbc=deepcopy(config.pbc),
             cell=deepcopy(config.cell),
         )
-
         indices = atomic_numbers_to_indices(config.atomic_numbers, z_table=z_table)
         one_hot = to_one_hot(
             torch.tensor(indices, dtype=torch.long).unsqueeze(-1),
@@ -187,24 +182,77 @@ class AtomicData(torch_geometric.data.Data):
             else torch.tensor(1.0, dtype=torch.get_default_dtype())
         )
 
-        def get_default_weight(prop_name):
-            return (
-                torch.tensor(
-                    config.property_weights.get(prop_name),
-                    dtype=torch.get_default_dtype(),
-                )
-                if config.property_weights.get(prop_name) is not None
-                else torch.tensor(1.0, dtype=torch.get_default_dtype())
+        energy_weight = (
+            torch.tensor(
+                config.property_weights.get("energy"), dtype=torch.get_default_dtype()
             )
+            if config.property_weights.get("energy") is not None
+            else torch.tensor(1.0, dtype=torch.get_default_dtype())
+        )
 
-        energy_weight = get_default_weight("energy")
-        forces_weight = get_default_weight("forces")
-        stress_weight = get_default_weight("stress")
-        virials_weight = get_default_weight("virials")
-        dipole_weight = get_default_weight("dipole")
-        charges_weight = get_default_weight("charges")
-        polarizability_weight = get_default_weight("polarizability")
+        forces_weight = (
+            torch.tensor(
+                config.property_weights.get("forces"), dtype=torch.get_default_dtype()
+            )
+            if config.property_weights.get("forces") is not None
+            else torch.tensor(1.0, dtype=torch.get_default_dtype())
+        )
 
+        stress_weight = (
+            torch.tensor(
+                config.property_weights.get("stress"), dtype=torch.get_default_dtype()
+            )
+            if config.property_weights.get("stress") is not None
+            else torch.tensor(1.0, dtype=torch.get_default_dtype())
+        )
+
+        virials_weight = (
+            torch.tensor(
+                config.property_weights.get("virials"), dtype=torch.get_default_dtype()
+            )
+            if config.property_weights.get("virials") is not None
+            else torch.tensor(1.0, dtype=torch.get_default_dtype())
+        )
+
+        dipole_weight = (
+            torch.tensor(
+                config.property_weights.get("dipole"), dtype=torch.get_default_dtype()
+            )
+            if config.property_weights.get("dipole") is not None
+            else torch.tensor([[1.0, 1.0, 1.0]], dtype=torch.get_default_dtype())
+        )
+        if len(dipole_weight.shape) == 0:
+            dipole_weight = dipole_weight * torch.tensor(
+                [[1.0, 1.0, 1.0]], dtype=torch.get_default_dtype()
+            )
+        elif len(dipole_weight.shape) == 1:
+            dipole_weight = dipole_weight.unsqueeze(0)
+
+        charges_weight = (
+            torch.tensor(
+                config.property_weights.get("charges"), dtype=torch.get_default_dtype()
+            )
+            if config.property_weights.get("charges") is not None
+            else torch.tensor(1.0, dtype=torch.get_default_dtype())
+        )
+        polarizability_weight = (
+            torch.tensor(
+                config.property_weights.get("polarizability"),
+                dtype=torch.get_default_dtype(),
+            )
+            if config.property_weights.get("polarizability") is not None
+            else torch.tensor(
+                [[[1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]]],
+                dtype=torch.get_default_dtype(),
+            )
+        )
+        if len(polarizability_weight.shape) == 0:
+            polarizability_weight = polarizability_weight * torch.tensor(
+                [[[1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]]],
+                dtype=torch.get_default_dtype(),
+            )
+        elif len(polarizability_weight.shape) == 2:
+            polarizability_weight = polarizability_weight.unsqueeze(0)
         forces = (
             torch.tensor(
                 config.properties.get("forces"), dtype=torch.get_default_dtype()
@@ -251,14 +299,6 @@ class AtomicData(torch_geometric.data.Data):
             if config.properties.get("charges") is not None
             else torch.zeros(num_atoms, dtype=torch.get_default_dtype())
         )
-        oxn = (
-            torch.tensor(config.properties.get("oxn"))
-            if config.properties.get("oxn") is not None
-            else torch.zeros(num_atoms, dtype=torch.get_default_dtype())
-        )
-        if not torch.all(oxn == oxn.floor()):
-            raise ValueError(f"oxn must contain integer values")
-        oxn = oxn.to(dtype=torch.get_default_dtype())
         elec_temp = (
             torch.tensor(
                 config.properties.get("elec_temp"),
@@ -320,7 +360,6 @@ class AtomicData(torch_geometric.data.Data):
             virials=virials,
             dipole=dipole,
             charges=charges,
-            oxn=oxn,
             elec_temp=elec_temp,
             total_charge=total_charge,
             polarizability=polarizability,
