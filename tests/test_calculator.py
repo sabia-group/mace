@@ -277,6 +277,13 @@ def trained_model_equivariant_fixture_cueq(tmp_path_factory, fitting_configs):
 
 @pytest.fixture(scope="module", name="trained_dipole_model")
 def trained_dipole_fixture(tmp_path_factory, fitting_configs):
+    return _dipole_fixture(tmp_path_factory, fitting_configs)
+
+@pytest.fixture(scope="module", name="trained_dipole_model_nan")
+def trained_dipole_model_nan(tmp_path_factory, fitting_configs_nan):
+    return _dipole_fixture(tmp_path_factory, fitting_configs_nan)
+    
+def _dipole_fixture(tmp_path_factory, fitting_configs):
     _mace_params = {
         "name": "MACE",
         "valid_fraction": 0.05,
