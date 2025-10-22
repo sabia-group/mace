@@ -375,12 +375,21 @@ def compute_mean_rms_energy_forces(
 
     # mean = to_numpy(torch.mean(atom_energies)).item()
     # rms = to_numpy(torch.sqrt(torch.mean(torch.square(forces)))).item()
-    mean = to_numpy(scatter_mean(src=atom_energies, index=head, dim=0).squeeze(-1))
+    ii = ~torch.isnan(atom_energies)
+    mean = to_numpy(
+        scatter_mean(src=atom_energies[ii], index=head[ii], dim=0).squeeze(-1)
+    )
+
+    ii = ~torch.isnan(forces).any(dim=-1)
     rms = to_numpy(
         torch.sqrt(
-            scatter_mean(src=torch.square(forces), index=head_batch, dim=0).mean(-1)
+            scatter_mean(
+                src=torch.square(forces[ii]), index=head_batch[ii], dim=0
+            ).mean(-1)
         )
     )
+    assert not np.any(np.isnan(mean)), "Mean energy is NaN"
+    assert not np.any(np.isnan(rms)), "RMS force is NaN"
     rms = _check_non_zero(rms)
 
     return mean, rms
