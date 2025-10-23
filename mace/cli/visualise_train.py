@@ -727,24 +727,26 @@ class InferenceMetric(Metric):
             self.pred_dipole_per_atom.append(output["dipole"] / atoms_per_config_3d)
 
             self.n_dipole += filter_nonzero_weight(
-                batch, self.ref_dipole, batch.weight, batch.dipole_weight, "config"
+                batch, self.ref_dipole, batch.weight, batch.dipole_weight, False, True
             )
             filter_nonzero_weight(
-                batch, self.pred_dipole, batch.weight, batch.dipole_weight, "config"
+                batch, self.pred_dipole, batch.weight, batch.dipole_weight, False, True
             )
             filter_nonzero_weight(
                 batch,
                 self.ref_dipole_per_atom,
                 batch.weight,
                 batch.dipole_weight,
-                spread_quantity_vector=False,
+                False,
+                True,
             )
             filter_nonzero_weight(
                 batch,
                 self.pred_dipole_per_atom,
                 batch.weight,
                 batch.dipole_weight,
-                spread_quantity_vector=False,
+                False,
+                True,
             )
 
     def _process_data(self, ref_list, pred_list):
