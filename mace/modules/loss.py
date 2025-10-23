@@ -236,7 +236,7 @@ def weighted_mean_squared_error_dipole(
     num_atoms = (ref.ptr[1:] - ref.ptr[:-1]).unsqueeze(-1)
     raw_loss = general_loss_with_nan(
         ref.weight.unsqueeze(-1),
-        ref.dipole_weight,
+        ref.dipole_weight.unsqueeze(-1),
         ref["dipole"],
         pred["dipole"],
         torch.square,
