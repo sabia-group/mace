@@ -4,7 +4,6 @@
 # This program is distributed under the MIT License (see MIT.md)
 ###########################################################################################
 
-import logging
 import os
 from typing import Callable, Optional
 
@@ -232,8 +231,21 @@ def mean_normed_error_forces(
 # ------------------------------------------------------------------------------
 
 
+def wrap05(x: torch.Tensor) -> torch.Tensor:
+    """Wrap number to [-0.5, 0.5)"""
+    return x - torch.round(x)
+
+
+def wrap01(x: torch.Tensor) -> torch.Tensor:
+    """Wrap number to [0, 1)"""
+    return wrap05(x) + torch.tensor(0.5)
+
+
 def pbc_dipole(
-    cell: torch.Tensor, pbc: torch.Tensor, delta: torch.Tensor, i: torch.Tensor
+    cell: torch.Tensor,
+    pbc: torch.Tensor,
+    delta: torch.Tensor,
+    i: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
     """
     Computes a PBC-invariant dipole loss.
@@ -242,7 +254,7 @@ def pbc_dipole(
     # Select relevant structures
     cell = torch.reshape(cell, (-1, 3, 3))[i]
     pbc = torch.reshape(pbc, (-1, 3))[i]
-    delta = torch.reshape(delta, (-1, 3))[i]
+    delta = torch.reshape(delta, (-1, 3))  # already masked in 'general_loss_with_nan'
 
     if not torch.all(pbc.bool()):
         raise ValueError("This function only supports fully 3D periodic systems.")
@@ -251,16 +263,26 @@ def pbc_dipole(
     assert cell.shape == (N, 3, 3), "error in cell shape"
     assert delta.shape == (N, 3), "error in delta shape"
     assert delta.shape == pbc.shape, "delta.shape should be the same as pbc.shape"
+    assert not torch.any(torch.isnan(delta)), "Found NaN values"
 
     # Compute fractional displacements
     icell = torch.linalg.inv(cell)
     frac = torch.einsum("ijk,ik->ij", icell, delta)
 
     # Wrap to [-0.5, 0.5)
-    frac = frac - torch.round(frac)
+    frac = wrap05(frac)
+    assert torch.all(frac >= -0.5)
+    assert torch.all(frac <= 1.5)
 
     # Back to Cartesian
-    return torch.einsum("ijk,ik->ij", cell, frac)
+    final = torch.einsum("ijk,ik->ij", cell, frac)
+
+    cart_shift = final - delta
+    frac_shift = torch.einsum("ijk,ik->ij", icell, cart_shift)
+    frac_shift = wrap05(frac_shift)
+    assert torch.allclose(frac_shift, torch.tensor(0.0)), "coding error"
+
+    return final
 
 
 def weighted_mean_squared_error_dipole(
@@ -271,7 +293,6 @@ def weighted_mean_squared_error_dipole(
     def dipole_loss_func(x, a, i):
         """Compute squared dipole loss for PBC or non-PBC environments."""
         if os.environ.get("pbc_dipole_loss", False):
-            logging.warning("Experimental feature: using 'pbc_dipole'.")
             return torch.square(pbc_dipole(ref.cell, ref.pbc, x, i) / a)
         return torch.square(x / a)
 
