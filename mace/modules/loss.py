@@ -266,7 +266,7 @@ def weighted_mean_squared_error_dipole(
     ref: Batch, pred: TensorDict, ddp: Optional[bool] = None
 ) -> torch.Tensor:
     num_atoms = (ref.ptr[1:] - ref.ptr[:-1]).unsqueeze(-1)
-    if os.environ.get("pbc_dipole_loss", True):
+    if os.environ.get("pbc_dipole_loss", False):
         func = lambda x, a, i: torch.square(pbc_dipole(ref.cell, ref.pbc, x, i) / a)
     else:
         func = lambda x, a, i: torch.square(x / a)
