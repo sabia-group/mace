@@ -4,7 +4,6 @@
 # This program is distributed under the MIT License (see MIT.md)
 ###########################################################################################
 
-import logging
 import os
 from typing import Callable, Optional
 
@@ -271,7 +270,6 @@ def weighted_mean_squared_error_dipole(
     def dipole_loss_func(x, a, i):
         """Compute squared dipole loss for PBC or non-PBC environments."""
         if os.environ.get("pbc_dipole_loss", False):
-            logging.warning("Experimental feature: using dipole_loss_func.")
             return torch.square(pbc_dipole(ref.cell, ref.pbc, x, i) / a)
         return torch.square(x / a)
 
