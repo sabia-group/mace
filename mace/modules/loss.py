@@ -266,19 +266,22 @@ def weighted_mean_squared_error_dipole(
     ref: Batch, pred: TensorDict, ddp: Optional[bool] = None
 ) -> torch.Tensor:
     num_atoms = (ref.ptr[1:] - ref.ptr[:-1]).unsqueeze(-1)
-    if os.environ.get("pbc_dipole_loss", False):
-        func = lambda x, a, i: torch.square(pbc_dipole(ref.cell, ref.pbc, x, i) / a)
-    else:
-        func = lambda x, a, i: torch.square(x / a)
+
+    def dipole_loss_func(x, a, i):
+        """Compute squared dipole loss for PBC or non-PBC environments."""
+        if os.environ.get("pbc_dipole_loss", False):
+            return torch.square(pbc_dipole(ref.cell, ref.pbc, x, i) / a)
+        return torch.square(x / a)
+
     raw_loss = general_loss_with_nan(
         ref.weight.unsqueeze(-1),
         ref.dipole_weight.unsqueeze(-1),
         ref["dipole"],
         pred["dipole"],
-        func,
+        dipole_loss_func,
         num_atoms,
     )
-    # raw_loss = torch.square((ref["dipole"] - pred["dipole"]) / num_atoms)
+
     return reduce_loss(raw_loss, ddp)
 
 
