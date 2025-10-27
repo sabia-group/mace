@@ -375,12 +375,21 @@ def compute_mean_rms_energy_forces(
 
     # mean = to_numpy(torch.mean(atom_energies)).item()
     # rms = to_numpy(torch.sqrt(torch.mean(torch.square(forces)))).item()
-    mean = to_numpy(scatter_mean(src=atom_energies, index=head, dim=0).squeeze(-1))
+    ii = ~torch.isnan(atom_energies)
+    mean = to_numpy(
+        scatter_mean(src=atom_energies[ii], index=head[ii], dim=0).squeeze(-1)
+    )
+
+    ii = ~torch.isnan(forces).any(dim=-1)
     rms = to_numpy(
         torch.sqrt(
-            scatter_mean(src=torch.square(forces), index=head_batch, dim=0).mean(-1)
+            scatter_mean(
+                src=torch.square(forces[ii]), index=head_batch[ii], dim=0
+            ).mean(-1)
         )
     )
+    assert not np.any(np.isnan(mean)), "Mean energy is NaN"
+    assert not np.any(np.isnan(rms)), "RMS force is NaN"
     rms = _check_non_zero(rms)
 
     return mean, rms
@@ -573,6 +582,51 @@ def compute_dielectric_gradients(
     if gradient is None:
         return torch.zeros((positions.shape[0], dielectric.shape[-1], 3))
     return gradient
+
+
+def get_dipole_outputs(
+    atomic_dipoles: torch.Tensor,
+    ptr: torch.Tensor,
+    batch: torch.Tensor,
+    charges: torch.Tensor,
+    positions: torch.Tensor,
+    # data: Batch
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    Computes the dipole outputs for the MACE model.
+
+    Args:
+        atomic_dipoles (Tensor): Atomic dipoles of shape [n_nodes, 3].
+        data (Dict[str, Tensor]): Dictionary with keys:
+            - "ptr": (Tensor)
+            - "batch": (Tensor)
+            - "charges": (Tensor)
+            - "positions": (Tensor)
+
+    Returns:
+        Dict[str, Tensor]: Contains:
+            - "dipole": [n_graphs, 3]
+            - "atomic_dipoles": [n_nodes, 3]
+            - "atomic-oxn-dipole": [n_nodes, 3]
+    """
+    num_graphs = ptr.numel() - 1
+    delta_dipole = scatter_sum(
+        atomic_dipoles,
+        batch.unsqueeze(-1),
+        dim=0,
+        dim_size=num_graphs,
+    )  # [n_graphs, 3]
+
+    baseline, baseline_atomic = compute_fixed_charge_dipole(
+        charges=charges,
+        positions=positions,
+        batch=batch,
+        num_graphs=num_graphs,
+    )  # [n_graphs,3], [n_nodes,3]
+
+    total_dipole = delta_dipole + baseline
+
+    return total_dipole, baseline_atomic
 
 
 def compute_dielectric_gradients_loop(

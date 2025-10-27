@@ -778,7 +778,6 @@ class AtomicDipolesMACE(torch.nn.Module):
         # Setup
         data["node_attrs"].requires_grad_(True)
         data["positions"].requires_grad_(True)
-        num_graphs = data["ptr"].numel() - 1
 
         # Embeddings
         node_feats = self.node_embedding(data["node_attrs"])

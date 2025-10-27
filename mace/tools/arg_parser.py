@@ -646,6 +646,7 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         default="weighted",
         choices=[
             "ef",
+            "pes",
             "weighted",
             "forces_only",
             "virials",

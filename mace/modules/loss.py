@@ -4,7 +4,9 @@
 # This program is distributed under the MIT License (see MIT.md)
 ###########################################################################################
 
-from typing import Optional
+import logging
+import os
+from typing import Callable, Optional
 
 import torch
 import torch.distributed as dist
@@ -44,6 +46,47 @@ def reduce_loss(raw_loss: torch.Tensor, ddp: Optional[bool] = None) -> torch.Ten
 
 
 # ------------------------------------------------------------------------------
+# double where trick
+# - https://github.com/pytorch/pytorch/issues/156212
+# - https://docs.jax.dev/en/latest/faq.html#gradients-contain-nan-where-using-where
+# - https://github.com/tensorflow/probability/blob/main/discussion/where-nan.pdf
+# ------------------------------------------------------------------------------
+def general_loss_with_nan(
+    ref_weight: torch.Tensor,
+    quantity_weight: torch.Tensor,
+    ref: torch.Tensor,
+    pred: torch.Tensor,
+    func: Callable[[torch.Tensor], torch.Tensor],
+    num_atoms: Optional[torch.Tensor] = None,
+) -> torch.Tensor:
+    # Create mask: True where all elements along non-batch dims are valid
+    ii = ~torch.isnan(ref)
+    if ii.ndim > 1:
+        ii = ii.all(dim=tuple(range(1, ii.ndim)))  # mask along all dims except first
+
+    if not ii.any():
+        # Return zero loss if no valid entries
+        return torch.tensor(0.0, device=ref.device, dtype=ref.dtype)
+
+    # Ensure num_atoms is broadcastable or masked properly
+    if num_atoms is None:
+        num_atoms = torch.ones_like(ref)
+
+    # Masked computation
+    safe_ref = ref[ii]
+    safe_pred = pred[ii]
+    safe_num_atoms = num_atoms[ii] if num_atoms.ndim == ii.ndim else num_atoms[ii]
+
+    raw_loss = (
+        ref_weight[ii]
+        * quantity_weight[ii]
+        * func(safe_ref - safe_pred, safe_num_atoms, ii)
+    )
+
+    return raw_loss
+
+
+# ------------------------------------------------------------------------------
 # Energy Loss Functions
 # ------------------------------------------------------------------------------
 
@@ -60,11 +103,20 @@ def weighted_mean_squared_error_energy(
 ) -> torch.Tensor:
     # Calculate per-graph number of atoms.
     num_atoms = ref.ptr[1:] - ref.ptr[:-1]  # shape: [n_graphs]
-    raw_loss = (
-        ref.weight
-        * ref.energy_weight
-        * torch.square((ref["energy"] - pred["energy"]) / num_atoms)
+    raw_loss = general_loss_with_nan(
+        ref.weight,
+        ref.energy_weight,
+        ref["energy"],
+        pred["energy"],
+        lambda x, a, i: torch.square(x / a),
+        num_atoms,
     )
+    # ii = ~torch.isnan(ref["energy"])
+    # raw_loss = (
+    #     ref.weight[ii]
+    #     * ref.energy_weight[ii]
+    #     * torch.square((ref["energy"][ii] - pred["energy"][ii]) / num_atoms[ii])
+    # )
     return reduce_loss(raw_loss, ddp)
 
 
@@ -72,11 +124,19 @@ def weighted_mean_absolute_error_energy(
     ref: Batch, pred: TensorDict, ddp: Optional[bool] = None
 ) -> torch.Tensor:
     num_atoms = ref.ptr[1:] - ref.ptr[:-1]
-    raw_loss = (
-        ref.weight
-        * ref.energy_weight
-        * torch.abs((ref["energy"] - pred["energy"]) / num_atoms)
+    raw_loss = general_loss_with_nan(
+        ref.weight,
+        ref.energy_weight,
+        ref["energy"],
+        pred["energy"],
+        lambda x, a, i: torch.abs(x / a),
+        num_atoms,
     )
+    # raw_loss = (
+    #     ref.weight
+    #     * ref.energy_weight
+    #     * torch.abs((ref["energy"] - pred["energy"]) / num_atoms)
+    # )
     return reduce_loss(raw_loss, ddp)
 
 
@@ -90,11 +150,19 @@ def weighted_mean_squared_stress(
 ) -> torch.Tensor:
     configs_weight = ref.weight.view(-1, 1, 1)
     configs_stress_weight = ref.stress_weight.view(-1, 1, 1)
-    raw_loss = (
-        configs_weight
-        * configs_stress_weight
-        * torch.square(ref["stress"] - pred["stress"])
+    raw_loss = general_loss_with_nan(
+        configs_weight,
+        configs_stress_weight,
+        ref["stress"],
+        pred["stress"],
+        lambda x, a, i: torch.square(x / a),
     )
+    # ii = ~torch.isnan(ref["stress"])
+    # raw_loss = (
+    #     configs_weight
+    #     * configs_stress_weight
+    #     * torch.square(ref["stress"] - pred["stress"])
+    # )[ii]
     return reduce_loss(raw_loss, ddp)
 
 
@@ -104,11 +172,20 @@ def weighted_mean_squared_virials(
     configs_weight = ref.weight.view(-1, 1, 1)
     configs_virials_weight = ref.virials_weight.view(-1, 1, 1)
     num_atoms = (ref.ptr[1:] - ref.ptr[:-1]).view(-1, 1, 1)
-    raw_loss = (
-        configs_weight
-        * configs_virials_weight
-        * torch.square((ref["virials"] - pred["virials"]) / num_atoms)
+    raw_loss = general_loss_with_nan(
+        configs_weight,
+        configs_virials_weight,
+        ref["virials"],
+        pred["virials"],
+        lambda x, a, i: torch.square(x / a),
+        num_atoms,
     )
+    # ii = ~torch.isnan(ref["virials"])
+    # raw_loss = (
+    #     configs_weight
+    #     * configs_virials_weight
+    #     * torch.square((ref["virials"] - pred["virials"]) / num_atoms)
+    # )[ii]
     return reduce_loss(raw_loss, ddp)
 
 
@@ -127,11 +204,19 @@ def mean_squared_error_forces(
     configs_forces_weight = torch.repeat_interleave(
         ref.forces_weight, ref.ptr[1:] - ref.ptr[:-1]
     ).unsqueeze(-1)
-    raw_loss = (
-        configs_weight
-        * configs_forces_weight
-        * torch.square(ref["forces"] - pred["forces"])
+    raw_loss = general_loss_with_nan(
+        configs_weight,
+        configs_forces_weight,
+        ref["forces"],
+        pred["forces"],
+        lambda x, a, i: torch.square(x / a),
     )
+    # ii = ~torch.isnan(ref["forces"]).any(dim=-1)
+    # raw_loss = (
+    #     configs_weight[ii]
+    #     * configs_forces_weight[ii]
+    #     * torch.square(ref["forces"][ii] - pred["forces"][ii])
+    # )
     return reduce_loss(raw_loss, ddp)
 
 
@@ -147,11 +232,58 @@ def mean_normed_error_forces(
 # ------------------------------------------------------------------------------
 
 
+def pbc_dipole(
+    cell: torch.Tensor, pbc: torch.Tensor, delta: torch.Tensor, i: torch.Tensor
+) -> torch.Tensor:
+    """
+    Computes a PBC-invariant dipole loss.
+    Assumes 3D periodicity (pbc = [1,1,1] or True,True,True).
+    """
+    # Select relevant structures
+    cell = torch.reshape(cell, (-1, 3, 3))[i]
+    pbc = torch.reshape(pbc, (-1, 3))[i]
+    delta = torch.reshape(delta, (-1, 3))[i]
+
+    if not torch.all(pbc.bool()):
+        raise ValueError("This function only supports fully 3D periodic systems.")
+
+    N = cell.shape[0]
+    assert cell.shape == (N, 3, 3), "error in cell shape"
+    assert delta.shape == (N, 3), "error in delta shape"
+    assert delta.shape == pbc.shape, "delta.shape should be the same as pbc.shape"
+
+    # Compute fractional displacements
+    icell = torch.linalg.inv(cell)
+    frac = torch.einsum("ijk,ik->ij", icell, delta)
+
+    # Wrap to [-0.5, 0.5)
+    frac = frac - torch.round(frac)
+
+    # Back to Cartesian
+    return torch.einsum("ijk,ik->ij", cell, frac)
+
+
 def weighted_mean_squared_error_dipole(
     ref: Batch, pred: TensorDict, ddp: Optional[bool] = None
 ) -> torch.Tensor:
     num_atoms = (ref.ptr[1:] - ref.ptr[:-1]).unsqueeze(-1)
-    raw_loss = torch.square((ref["dipole"] - pred["dipole"]) / num_atoms)
+
+    def dipole_loss_func(x, a, i):
+        """Compute squared dipole loss for PBC or non-PBC environments."""
+        if os.environ.get("pbc_dipole_loss", False):
+            logging.warning("Experimental feature: using 'pbc_dipole'.")
+            return torch.square(pbc_dipole(ref.cell, ref.pbc, x, i) / a)
+        return torch.square(x / a)
+
+    raw_loss = general_loss_with_nan(
+        ref.weight.unsqueeze(-1),
+        ref.dipole_weight.unsqueeze(-1),
+        ref["dipole"],
+        pred["dipole"],
+        dipole_loss_func,
+        num_atoms,
+    )
+
     return reduce_loss(raw_loss, ddp)
 
 
@@ -243,88 +375,15 @@ def conditional_huber_forces(
 # ------------------------------------------------------------------------------
 
 
-class WeightedEnergyForcesLoss(torch.nn.Module):
-    def __init__(self, energy_weight=1.0, forces_weight=1.0) -> None:
-        super().__init__()
-        self.register_buffer(
-            "energy_weight",
-            torch.tensor(energy_weight, dtype=torch.get_default_dtype()),
-        )
-        self.register_buffer(
-            "forces_weight",
-            torch.tensor(forces_weight, dtype=torch.get_default_dtype()),
-        )
-
-    def forward(
-        self, ref: Batch, pred: TensorDict, ddp: Optional[bool] = None
-    ) -> torch.Tensor:
-        loss_energy = weighted_mean_squared_error_energy(ref, pred, ddp)
-        loss_forces = mean_squared_error_forces(ref, pred, ddp)
-        return self.energy_weight * loss_energy + self.forces_weight * loss_forces
-
-    def __repr__(self):
-        return (
-            f"{self.__class__.__name__}(energy_weight={self.energy_weight:.3f}, "
-            f"forces_weight={self.forces_weight:.3f})"
-        )
-
-
-class WeightedForcesLoss(torch.nn.Module):
-    def __init__(self, forces_weight=1.0) -> None:
-        super().__init__()
-        self.register_buffer(
-            "forces_weight",
-            torch.tensor(forces_weight, dtype=torch.get_default_dtype()),
-        )
-
-    def forward(
-        self, ref: Batch, pred: TensorDict, ddp: Optional[bool] = None
-    ) -> torch.Tensor:
-        loss_forces = mean_squared_error_forces(ref, pred, ddp)
-        return self.forces_weight * loss_forces
-
-    def __repr__(self):
-        return f"{self.__class__.__name__}(forces_weight={self.forces_weight:.3f})"
-
-
-class WeightedEnergyForcesStressLoss(torch.nn.Module):
-    def __init__(self, energy_weight=1.0, forces_weight=1.0, stress_weight=1.0) -> None:
-        super().__init__()
-        self.register_buffer(
-            "energy_weight",
-            torch.tensor(energy_weight, dtype=torch.get_default_dtype()),
-        )
-        self.register_buffer(
-            "forces_weight",
-            torch.tensor(forces_weight, dtype=torch.get_default_dtype()),
-        )
-        self.register_buffer(
-            "stress_weight",
-            torch.tensor(stress_weight, dtype=torch.get_default_dtype()),
-        )
-
-    def forward(
-        self, ref: Batch, pred: TensorDict, ddp: Optional[bool] = None
-    ) -> torch.Tensor:
-        loss_energy = weighted_mean_squared_error_energy(ref, pred, ddp)
-        loss_forces = mean_squared_error_forces(ref, pred, ddp)
-        loss_stress = weighted_mean_squared_stress(ref, pred, ddp)
-        return (
-            self.energy_weight * loss_energy
-            + self.forces_weight * loss_forces
-            + self.stress_weight * loss_stress
-        )
-
-    def __repr__(self):
-        return (
-            f"{self.__class__.__name__}(energy_weight={self.energy_weight:.3f}, "
-            f"forces_weight={self.forces_weight:.3f}, stress_weight={self.stress_weight:.3f})"
-        )
-
-
-class WeightedEnergyForcesStressDipoleLoss(torch.nn.Module):
+class PESDielectricLoss(torch.nn.Module):
     def __init__(
-        self, energy_weight=1.0, forces_weight=1.0, stress_weight=1.0, dipole_weight=1.0
+        self,
+        energy_weight=0.0,
+        forces_weight=0.0,
+        stress_weight=0.0,
+        virials_weight=0.0,
+        dipole_weight=0.0,
+        polarizability_weight=0.0,
     ) -> None:
         super().__init__()
         self.register_buffer(
@@ -340,28 +399,57 @@ class WeightedEnergyForcesStressDipoleLoss(torch.nn.Module):
             torch.tensor(stress_weight, dtype=torch.get_default_dtype()),
         )
         self.register_buffer(
+            "virials_weight",
+            torch.tensor(virials_weight, dtype=torch.get_default_dtype()),
+        )
+        self.register_buffer(
             "dipole_weight",
             torch.tensor(dipole_weight, dtype=torch.get_default_dtype()),
+        )
+        self.register_buffer(
+            "polarizability_weight",
+            torch.tensor(polarizability_weight, dtype=torch.get_default_dtype()),
         )
 
     def forward(
         self, ref: Batch, pred: TensorDict, ddp: Optional[bool] = None
     ) -> torch.Tensor:
-        loss_energy = weighted_mean_squared_error_energy(ref, pred, ddp)
-        loss_forces = mean_squared_error_forces(ref, pred, ddp)
-        loss_stress = weighted_mean_squared_stress(ref, pred, ddp)
-        loss_dipole = weighted_mean_squared_error_dipole(ref, pred, ddp)
-        return (
-            self.energy_weight * loss_energy
-            + self.forces_weight * loss_forces
-            + self.stress_weight * loss_stress
-            + self.dipole_weight * loss_dipole
-        )
+        loss = torch.tensor(0.0, dtype=torch.get_default_dtype())
+        if self.energy_weight > 0.0:
+            loss = loss + self.energy_weight * weighted_mean_squared_error_energy(
+                ref, pred, ddp
+            )
+        if self.forces_weight > 0.0:
+            loss = loss + self.forces_weight * mean_squared_error_forces(ref, pred, ddp)
+        if self.stress_weight > 0.0:
+            loss = loss + self.stress_weight * weighted_mean_squared_stress(
+                ref, pred, ddp
+            )
+        if self.virials_weight > 0.0:
+            loss = loss + self.virials_weight * weighted_mean_squared_virials(
+                ref, pred, ddp
+            )
+        if self.dipole_weight > 0.0:
+            loss = loss + self.dipole_weight * weighted_mean_squared_error_dipole(
+                ref, pred, ddp
+            )
+        if self.polarizability_weight > 0.0:
+            loss = (
+                loss
+                + self.polarizability_weight
+                * weighted_mean_squared_error_polarizability(ref, pred, ddp)
+            )
+        return loss
 
     def __repr__(self):
         return (
-            f"{self.__class__.__name__}(energy_weight={self.energy_weight:.3f}, "
-            f"forces_weight={self.forces_weight:.3f}, stress_weight={self.stress_weight:.3f}, dipole_weight={self.dipole_weight:.3f})"
+            f"{self.__class__.__name__}"
+            + f"(energy_weight={self.energy_weight:.2e}, "
+            + f"forces_weight={self.forces_weight:.2e}, "
+            + f"stress_weight={self.stress_weight:.2e}, "
+            + f"virials_weight={self.virials_weight:.2e},"
+            + f"dipole_weight={self.dipole_weight:.2e},"
+            + f"polarizability_weight={self.polarizability_weight:.2e})"
         )
 
 
@@ -509,136 +597,6 @@ class UniversalLoss(torch.nn.Module):
         return (
             f"{self.__class__.__name__}(energy_weight={self.energy_weight:.3f}, "
             f"forces_weight={self.forces_weight:.3f}, stress_weight={self.stress_weight:.3f})"
-        )
-
-
-class WeightedEnergyForcesVirialsLoss(torch.nn.Module):
-    def __init__(
-        self, energy_weight=1.0, forces_weight=1.0, virials_weight=1.0
-    ) -> None:
-        super().__init__()
-        self.register_buffer(
-            "energy_weight",
-            torch.tensor(energy_weight, dtype=torch.get_default_dtype()),
-        )
-        self.register_buffer(
-            "forces_weight",
-            torch.tensor(forces_weight, dtype=torch.get_default_dtype()),
-        )
-        self.register_buffer(
-            "virials_weight",
-            torch.tensor(virials_weight, dtype=torch.get_default_dtype()),
-        )
-
-    def forward(
-        self, ref: Batch, pred: TensorDict, ddp: Optional[bool] = None
-    ) -> torch.Tensor:
-        loss_energy = weighted_mean_squared_error_energy(ref, pred, ddp)
-        loss_forces = mean_squared_error_forces(ref, pred, ddp)
-        loss_virials = weighted_mean_squared_virials(ref, pred, ddp)
-        return (
-            self.energy_weight * loss_energy
-            + self.forces_weight * loss_forces
-            + self.virials_weight * loss_virials
-        )
-
-    def __repr__(self):
-        return (
-            f"{self.__class__.__name__}(energy_weight={self.energy_weight:.3f}, "
-            f"forces_weight={self.forces_weight:.3f}, virials_weight={self.virials_weight:.3f})"
-        )
-
-
-class DipoleSingleLoss(torch.nn.Module):
-    def __init__(self, dipole_weight=1.0) -> None:
-        super().__init__()
-        self.register_buffer(
-            "dipole_weight",
-            torch.tensor(dipole_weight, dtype=torch.get_default_dtype()),
-        )
-
-    def forward(
-        self, ref: Batch, pred: TensorDict, ddp: Optional[bool] = None
-    ) -> torch.Tensor:
-        loss = (
-            weighted_mean_squared_error_dipole(ref, pred, ddp) * 100.0
-        )  # scale adjustment
-        return self.dipole_weight * loss
-
-    def __repr__(self):
-        return f"{self.__class__.__name__}(dipole_weight={self.dipole_weight:.3f})"
-
-
-class DipolePolarLoss(torch.nn.Module):
-    def __init__(
-        self, dipole_weight=1.0, polarizability_weight=1.0
-    ) -> (
-        None
-    ):  # dipole_mean=None,dipole_std=None,polarizability_mean=None,polarizability_std=None
-        super().__init__()
-        self.register_buffer(
-            "dipole_weight",
-            torch.tensor(dipole_weight, dtype=torch.get_default_dtype()),
-        )
-        self.register_buffer(
-            "polarizability_weight",
-            torch.tensor(polarizability_weight, dtype=torch.get_default_dtype()),
-        )
-
-    def forward(
-        self, ref: Batch, pred: TensorDict, ddp: Optional[bool] = None
-    ) -> torch.Tensor:
-        loss_dipole = weighted_mean_squared_error_dipole(
-            ref, pred, ddp
-        )  # ,self.dipole_mean,self.dipole_std) #* 100.0  # scale adjustment
-
-        loss_polarizability = weighted_mean_squared_error_polarizability(
-            ref, pred, ddp
-        )  # ,self.polarizability_mean,self.polarizability_std) #* 100.0  # scale adjustment
-        return (
-            self.dipole_weight * loss_dipole
-            + self.polarizability_weight * loss_polarizability
-        )
-
-    def __repr__(self):
-        return (
-            f"{self.__class__.__name__}("
-            f"dipole_weight={self.dipole_weight:.3f}, polarizability_weight={self.polarizability_weight:.3f})"
-        )
-
-
-class WeightedEnergyForcesDipoleLoss(torch.nn.Module):
-    def __init__(self, energy_weight=1.0, forces_weight=1.0, dipole_weight=1.0) -> None:
-        super().__init__()
-        self.register_buffer(
-            "energy_weight",
-            torch.tensor(energy_weight, dtype=torch.get_default_dtype()),
-        )
-        self.register_buffer(
-            "forces_weight",
-            torch.tensor(forces_weight, dtype=torch.get_default_dtype()),
-        )
-        self.register_buffer(
-            "dipole_weight",
-            torch.tensor(dipole_weight, dtype=torch.get_default_dtype()),
-        )
-
-    def forward(
-        self, ref: Batch, pred: TensorDict, ddp: Optional[bool] = None
-    ) -> torch.Tensor:
-        loss_energy = weighted_mean_squared_error_energy(ref, pred, ddp)
-        loss_forces = mean_squared_error_forces(ref, pred, ddp)
-        loss_dipole = weighted_mean_squared_error_dipole(ref, pred, ddp) * 100.0
-        return (
-            self.energy_weight * loss_energy
-            + self.forces_weight * loss_forces
-            + self.dipole_weight * loss_dipole
-        )
-
-    def __repr__(self):
-        return (
-            f"{self.__class__.__name__}(energy_weight={self.energy_weight:.3f}, "
-            f"forces_weight={self.forces_weight:.3f}, dipole_weight={self.dipole_weight:.3f})"
         )
 
 
