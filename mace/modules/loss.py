@@ -4,6 +4,8 @@
 # This program is distributed under the MIT License (see MIT.md)
 ###########################################################################################
 
+import logging
+import os
 from typing import Callable, Optional
 
 import torch
@@ -78,7 +80,7 @@ def general_loss_with_nan(
     raw_loss = (
         ref_weight[ii]
         * quantity_weight[ii]
-        * func((safe_ref - safe_pred) / safe_num_atoms)
+        * func(safe_ref - safe_pred, safe_num_atoms, ii)
     )
 
     return raw_loss
@@ -106,7 +108,7 @@ def weighted_mean_squared_error_energy(
         ref.energy_weight,
         ref["energy"],
         pred["energy"],
-        torch.square,
+        lambda x, a, i: torch.square(x / a),
         num_atoms,
     )
     # ii = ~torch.isnan(ref["energy"])
@@ -127,7 +129,7 @@ def weighted_mean_absolute_error_energy(
         ref.energy_weight,
         ref["energy"],
         pred["energy"],
-        torch.abs,
+        lambda x, a, i: torch.abs(x / a),
         num_atoms,
     )
     # raw_loss = (
@@ -153,7 +155,7 @@ def weighted_mean_squared_stress(
         configs_stress_weight,
         ref["stress"],
         pred["stress"],
-        torch.square,
+        lambda x, a, i: torch.square(x / a),
     )
     # ii = ~torch.isnan(ref["stress"])
     # raw_loss = (
@@ -175,7 +177,7 @@ def weighted_mean_squared_virials(
         configs_virials_weight,
         ref["virials"],
         pred["virials"],
-        torch.square,
+        lambda x, a, i: torch.square(x / a),
         num_atoms,
     )
     # ii = ~torch.isnan(ref["virials"])
@@ -207,7 +209,7 @@ def mean_squared_error_forces(
         configs_forces_weight,
         ref["forces"],
         pred["forces"],
-        torch.square,
+        lambda x, a, i: torch.square(x / a),
     )
     # ii = ~torch.isnan(ref["forces"]).any(dim=-1)
     # raw_loss = (
@@ -230,19 +232,58 @@ def mean_normed_error_forces(
 # ------------------------------------------------------------------------------
 
 
+def pbc_dipole(
+    cell: torch.Tensor, pbc: torch.Tensor, delta: torch.Tensor, i: torch.Tensor
+) -> torch.Tensor:
+    """
+    Computes a PBC-invariant dipole loss.
+    Assumes 3D periodicity (pbc = [1,1,1] or True,True,True).
+    """
+    # Select relevant structures
+    cell = torch.reshape(cell, (-1, 3, 3))[i]
+    pbc = torch.reshape(pbc, (-1, 3))[i]
+    delta = torch.reshape(delta, (-1, 3))[i]
+
+    if not torch.all(pbc.bool()):
+        raise ValueError("This function only supports fully 3D periodic systems.")
+
+    N = cell.shape[0]
+    assert cell.shape == (N, 3, 3), "error in cell shape"
+    assert delta.shape == (N, 3), "error in delta shape"
+    assert delta.shape == pbc.shape, "delta.shape should be the same as pbc.shape"
+
+    # Compute fractional displacements
+    icell = torch.linalg.inv(cell)
+    frac = torch.einsum("ijk,ik->ij", icell, delta)
+
+    # Wrap to [-0.5, 0.5)
+    frac = frac - torch.round(frac)
+
+    # Back to Cartesian
+    return torch.einsum("ijk,ik->ij", cell, frac)
+
+
 def weighted_mean_squared_error_dipole(
     ref: Batch, pred: TensorDict, ddp: Optional[bool] = None
 ) -> torch.Tensor:
     num_atoms = (ref.ptr[1:] - ref.ptr[:-1]).unsqueeze(-1)
+
+    def dipole_loss_func(x, a, i):
+        """Compute squared dipole loss for PBC or non-PBC environments."""
+        if os.environ.get("pbc_dipole_loss", False):
+            logging.warning("Experimental feature: using dipole_loss_func.")
+            return torch.square(pbc_dipole(ref.cell, ref.pbc, x, i) / a)
+        return torch.square(x / a)
+
     raw_loss = general_loss_with_nan(
         ref.weight.unsqueeze(-1),
-        ref.dipole_weight,
+        ref.dipole_weight.unsqueeze(-1),
         ref["dipole"],
         pred["dipole"],
-        torch.square,
+        dipole_loss_func,
         num_atoms,
     )
-    # raw_loss = torch.square((ref["dipole"] - pred["dipole"]) / num_atoms)
+
     return reduce_loss(raw_loss, ddp)
 
 
