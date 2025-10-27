@@ -68,8 +68,12 @@ def main():
 
     # Build neighbor list
     print(f"Building neighbor list with cutoff {args.cutoff} Å...")
-    neighbor_indices, shifts, _, _ = get_neighborhood(positions,args.cutoff,True,cell)
-    neighbor_distances, _ = get_edge_vectors_and_lengths(positions,neighbor_indices,shifts)   
+    neighbor_indices, shifts, _, _ = get_neighborhood(
+        positions, args.cutoff, True, cell
+    )
+    neighbor_distances, _ = get_edge_vectors_and_lengths(
+        positions, neighbor_indices, shifts
+    )
 
     print("Neighbor list computed. Found neighbors for each atom.")
 
@@ -96,7 +100,7 @@ def main():
     elif args.method == "p3m":
         try:
             from torchpme.tuning import tune_p3m
-        except ImportError as e:    
+        except ImportError as e:
             raise ImportError(
                 "torchpme is not installed. Please install it to use the 'p3m' method."
             ) from e
