@@ -27,15 +27,18 @@ except ImportError:
 pytest_mace_dir = Path(__file__).parent.parent
 run_train = Path(__file__).parent.parent / "mace" / "cli" / "run_train.py"
 
+
 # ----------------------------- #
 @pytest.fixture(scope="module", name="fitting_configs")
 def fitting_configs_fixture():
     return _fitting_config(with_nan=False)
 
+
 @pytest.fixture(scope="module", name="fitting_configs_nan")
 def fitting_configs_fixture_nan():
     return _fitting_config(with_nan=True)
-    
+
+
 def _fitting_config(with_nan: bool = False):
     water = Atoms(
         numbers=[8, 1, 1],
@@ -51,14 +54,14 @@ def _fitting_config(with_nan: bool = False):
     fit_configs[0].info["config_type"] = "IsolatedAtom"
     fit_configs[1].info["REF_energy"] = -0.5
     fit_configs[1].info["config_type"] = "IsolatedAtom"
-    
+
     if with_nan:
         np.random.seed(0)
         c = water.copy()
         c.positions += np.random.normal(0.1, size=c.positions.shape)
         c.info["REF_energy"] = np.nan
-        c.new_array("REF_forces", np.full(c.positions.shape,np.nan))
-        c.info["REF_stress"] = np.full(6,np.nan)
+        c.new_array("REF_forces", np.full(c.positions.shape, np.nan))
+        c.info["REF_stress"] = np.full(6, np.nan)
         fit_configs.append(c)
 
     np.random.seed(5)
@@ -74,15 +77,18 @@ def _fitting_config(with_nan: bool = False):
 
     return fit_configs
 
+
 # ----------------------------- #
 @pytest.fixture(scope="module", name="trained_model")
 def trained_model_fixture(tmp_path_factory, fitting_configs):
     return _model_fixture(tmp_path_factory, fitting_configs)
-    
+
+
 @pytest.fixture(scope="module", name="trained_model_nan")
 def trained_model_fixture_nan(tmp_path_factory, fitting_configs_nan):
     return _model_fixture(tmp_path_factory, fitting_configs_nan)
-    
+
+
 def _model_fixture(tmp_path_factory, fitting_configs):
     _mace_params = {
         "name": "MACE",
@@ -143,6 +149,7 @@ def _model_fixture(tmp_path_factory, fitting_configs):
     assert p.returncode == 0
 
     return MACECalculator(model_paths=tmp_path / "MACE.model", device="cpu")
+
 
 # ----------------------------- #
 @pytest.fixture(scope="module", name="trained_equivariant_model")
@@ -279,10 +286,12 @@ def trained_model_equivariant_fixture_cueq(tmp_path_factory, fitting_configs):
 def trained_dipole_fixture(tmp_path_factory, fitting_configs):
     return _dipole_fixture(tmp_path_factory, fitting_configs)
 
+
 @pytest.fixture(scope="module", name="trained_dipole_model_nan")
 def trained_dipole_model_nan(tmp_path_factory, fitting_configs_nan):
     return _dipole_fixture(tmp_path_factory, fitting_configs_nan)
-    
+
+
 def _dipole_fixture(tmp_path_factory, fitting_configs):
     _mace_params = {
         "name": "MACE",
@@ -411,10 +420,12 @@ def trained_dipole_polar_fixture(tmp_path_factory, fitting_configs):
 @pytest.fixture(scope="module", name="trained_energy_dipole_model")
 def trained_energy_dipole_fixture(tmp_path_factory, fitting_configs):
     return _energy_dipole_fixture(tmp_path_factory, fitting_configs)
-    
+
+
 @pytest.fixture(scope="module", name="trained_energy_dipole_model_nan")
 def trained_energy_dipole_fixture_nan(tmp_path_factory, fitting_configs_nan):
     return _energy_dipole_fixture(tmp_path_factory, fitting_configs_nan)
+
 
 def _energy_dipole_fixture(tmp_path_factory, fitting_configs):
     _mace_params = {
@@ -621,10 +632,12 @@ def test_calculator_from_model(fitting_configs, trained_committee):
 def test_calculator_dipole(fitting_configs, trained_dipole_model):
     _calculator_dipole(fitting_configs, trained_dipole_model)
 
+
 def test_calculator_dipole_nan(fitting_configs, trained_dipole_model_nan):
     _calculator_dipole(fitting_configs, trained_dipole_model_nan)
-        
-def _calculator_dipole(configs,model):
+
+
+def _calculator_dipole(configs, model):
     at = configs[2].copy()
     at.calc = model
 
@@ -635,10 +648,12 @@ def _calculator_dipole(configs,model):
 
 def test_calculator_energy_dipole(fitting_configs, trained_energy_dipole_model):
     _calculator_energy_dipole(fitting_configs, trained_energy_dipole_model)
-    
+
+
 def test_calculator_energy_dipole_nan(fitting_configs, trained_energy_dipole_model_nan):
     _calculator_energy_dipole(fitting_configs, trained_energy_dipole_model_nan)
-    
+
+
 def _calculator_energy_dipole(configs, model):
     assert model is not None, "Model is None"
     at = configs[2].copy()
@@ -821,6 +836,7 @@ def test_mace_omol_cueq(device="cpu"):
     assert np.allclose(energy, energy_cueq, atol=1e-6)
     assert np.allclose(forces, forces_cueq, atol=1e-6)
     assert np.allclose(energy, -2079.863496758961, atol=1e-9)
-    
+
+
 if __name__ == "__main__":
     pytest.main([__file__])
