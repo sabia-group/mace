@@ -120,6 +120,17 @@ def run(args) -> None:
         logging.info("Cannot find MACE version, please install MACE via pip")
     logging.debug(f"Configuration: {args}")
 
+    # environment variables
+    value = str(args.use_pbc_dipole).lower()
+    if "USE_PBC_DIPOLE" in os.environ:  # set in the submission script
+        old_value = os.environ["USE_PBC_DIPOLE"].lower()
+        logging.warning(
+            f"Environment variable 'USE_PBC_DIPOLE' already defined and equal to {old_value}, overwriting it to {value}."
+        )
+    os.environ["USE_PBC_DIPOLE"] = value
+    value = os.environ["USE_PBC_DIPOLE"]
+    logging.info(f"Using environment variable 'USE_PBC_DIPOLE' equal to {value}")
+
     tools.set_default_dtype(args.default_dtype)
     device = tools.init_device(args.device)
     commit = print_git_commit()

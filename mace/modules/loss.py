@@ -4,7 +4,6 @@
 # This program is distributed under the MIT License (see MIT.md)
 ###########################################################################################
 
-import logging
 import os
 from typing import Callable, Optional
 
@@ -13,6 +12,7 @@ import torch.distributed as dist
 
 from mace.tools import TensorDict
 from mace.tools.torch_geometric import Batch
+from mace.tools.utils import pbc_dipole
 
 
 # ------------------------------------------------------------------------------
@@ -232,37 +232,6 @@ def mean_normed_error_forces(
 # ------------------------------------------------------------------------------
 
 
-def pbc_dipole(
-    cell: torch.Tensor, pbc: torch.Tensor, delta: torch.Tensor, i: torch.Tensor
-) -> torch.Tensor:
-    """
-    Computes a PBC-invariant dipole loss.
-    Assumes 3D periodicity (pbc = [1,1,1] or True,True,True).
-    """
-    # Select relevant structures
-    cell = torch.reshape(cell, (-1, 3, 3))[i]
-    pbc = torch.reshape(pbc, (-1, 3))[i]
-    delta = torch.reshape(delta, (-1, 3))[i]
-
-    if not torch.all(pbc.bool()):
-        raise ValueError("This function only supports fully 3D periodic systems.")
-
-    N = cell.shape[0]
-    assert cell.shape == (N, 3, 3), "error in cell shape"
-    assert delta.shape == (N, 3), "error in delta shape"
-    assert delta.shape == pbc.shape, "delta.shape should be the same as pbc.shape"
-
-    # Compute fractional displacements
-    icell = torch.linalg.inv(cell)
-    frac = torch.einsum("ijk,ik->ij", icell, delta)
-
-    # Wrap to [-0.5, 0.5)
-    frac = frac - torch.round(frac)
-
-    # Back to Cartesian
-    return torch.einsum("ijk,ik->ij", cell, frac)
-
-
 def weighted_mean_squared_error_dipole(
     ref: Batch, pred: TensorDict, ddp: Optional[bool] = None
 ) -> torch.Tensor:
@@ -270,8 +239,12 @@ def weighted_mean_squared_error_dipole(
 
     def dipole_loss_func(x, a, i):
         """Compute squared dipole loss for PBC or non-PBC environments."""
-        if os.environ.get("pbc_dipole_loss", False):
-            logging.warning("Experimental feature: using 'pbc_dipole'.")
+        if os.environ.get("USE_PBC_DIPOLE", "false").lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        ):
             return torch.square(pbc_dipole(ref.cell, ref.pbc, x, i) / a)
         return torch.square(x / a)
 

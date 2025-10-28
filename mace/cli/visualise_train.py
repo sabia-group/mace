@@ -720,6 +720,20 @@ class InferenceMetric(Metric):
 
         # Dipole
         if output.get("dipole") is not None and batch.dipole is not None:
+            import os
+
+            if os.environ.get("USE_PBC_DIPOLE", "false").lower() in (
+                "1",
+                "true",
+                "yes",
+                "on",
+            ):
+                from mace.tools.utils import shift_ref_dipole
+
+                batch.dipole = shift_ref_dipole(
+                    batch.cell, batch.pbc, batch.dipole, output["dipole"]
+                )
+
             self.ref_dipole.append(batch.dipole)
             self.pred_dipole.append(output["dipole"])
             atoms_per_config_3d = atoms_per_config.view(-1, 1)
