@@ -500,51 +500,6 @@ def compute_fixed_charge_dipole(
     )  # [N_graphs,3]
 
 
-def get_dipole_outputs(
-    atomic_dipoles: torch.Tensor,
-    ptr: torch.Tensor,
-    batch: torch.Tensor,
-    charges: torch.Tensor,
-    positions: torch.Tensor,
-    # data: Batch
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    """
-    Computes the dipole outputs for the MACE model.
-
-    Args:
-        atomic_dipoles (Tensor): Atomic dipoles of shape [n_nodes, 3].
-        data (Dict[str, Tensor]): Dictionary with keys:
-            - "ptr": (Tensor)
-            - "batch": (Tensor)
-            - "charges": (Tensor)
-            - "positions": (Tensor)
-
-    Returns:
-        Dict[str, Tensor]: Contains:
-            - "dipole": [n_graphs, 3]
-            - "atomic_dipoles": [n_nodes, 3]
-            - "atomic-oxn-dipole": [n_nodes, 3]
-    """
-    num_graphs = ptr.numel() - 1
-    delta_dipole = scatter_sum(
-        atomic_dipoles,
-        batch.unsqueeze(-1),
-        dim=0,
-        dim_size=num_graphs,
-    )  # [n_graphs, 3]
-
-    baseline, baseline_atomic = compute_fixed_charge_dipole(
-        charges=charges,
-        positions=positions,
-        batch=batch,
-        num_graphs=num_graphs,
-    )  # [n_graphs,3], [n_nodes,3]
-
-    total_dipole = delta_dipole + baseline
-
-    return total_dipole, baseline_atomic
-
-
 def compute_fixed_charge_dipole_polar(
     charges: torch.Tensor,
     positions: torch.Tensor,
