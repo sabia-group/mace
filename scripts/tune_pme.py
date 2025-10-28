@@ -132,7 +132,7 @@ def main():
         **{k: (v.item() if torch.is_tensor(v) else v) for k, v in params.items()},
     }
 
-    with open(args.output, "w") as f:
+    with open(args.output, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=2)
     print(f"Saved tuning results to {args.output}")
 

@@ -1310,8 +1310,8 @@ class EnergyDipoleMACE(torch.nn.Module):
             from .long_range import PME
 
             self.pme = PME(
-                pme_arguments,
                 {"cueq_config": cueq_config, "oeq_config": oeq_config, "r_max": r_max},
+                pme_arguments,
             )
 
     def forward(

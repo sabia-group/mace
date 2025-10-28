@@ -1,4 +1,4 @@
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 import torch
 from e3nn.util.jit import compile_mode
@@ -6,7 +6,6 @@ from e3nn.util.jit import compile_mode
 from mace.modules.blocks import LinearReadoutBlock
 from mace.modules.utils import get_edge_vectors_and_lengths
 
-# ToDo:
 # - mask out atoms with zero charge/dipole to speed up the calculations
 # - reimplement DipoleDpole usign InversePowerLaw
 # - implement ChargeDipole
@@ -27,7 +26,7 @@ class PME(torch.nn.Module):
     Please, use the same cutoff radius in 'tune_pme.py' and in the input file for training!
     """
 
-    def __init__(self, pme_arguments: Optional[Dict] = None, kwargs=Optional[Dict]):
+    def __init__(self, kwargs: Dict[str, Any], pme_arguments: Optional[Dict] = None):
         super().__init__()
 
         assert (
@@ -164,7 +163,7 @@ class PME(torch.nn.Module):
                 atomic_dipoles = results["atomic_dipoles"][mask]
                 pme_data["atomic_dipoles"] = atomic_dipoles
 
-            # ToDo: filter these tensors to remove atoms with zero charge
+            # filter these tensors to remove atoms with zero charge
 
             # sanity check
             assert cell.shape == (
@@ -294,7 +293,7 @@ class ChargeCharge(LongRange):
 
 
 class ChargeDipole(LongRange):
-    def __init__(self, pme_arguments: Optional[Dict] = None, **kwargs):
+    def __init__(self, pme_arguments: Optional[Dict] = None):
         super().__init__(pme_arguments)
         raise ValueError("'ChargeDipole' not implemented yet.")
 
@@ -303,7 +302,7 @@ class ChargeDipole(LongRange):
 
 
 class DipoleDipole(LongRange):
-    def __init__(self, pme_arguments: Optional[Dict] = None, **kwargs):
+    def __init__(self, pme_arguments: Optional[Dict] = None):
         super().__init__(pme_arguments)
         try:
             from torchpme import CalculatorDipole
