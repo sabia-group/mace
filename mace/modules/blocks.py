@@ -57,6 +57,110 @@ class LinearNodeEmbeddingBlock(torch.nn.Module):
         return self.linear(node_attrs)
 
 
+@simplify_if_compile
+@compile_mode("script")
+class GeneralReadoutBlock(torch.nn.Module):
+    """
+    General readout block for equivariant neural networks.
+
+    This class can represent either a linear or a non-linear readout, depending on
+    whether `hidden_irreps` and `gate` are provided. It supports optional multi-head
+    masking and is fully compatible with e3nn's `Linear` and `Activation` modules.
+
+    Parameters
+    ----------
+    irreps_in : o3.Irreps
+        The input irreducible representations of the node features.
+    irrep_out : Optional[o3.Irreps], default=None
+        The output irreducible representations. If None, defaults to scalar "0e".
+    hidden_irreps : Optional[o3.Irreps], default=None
+        If provided, defines the hidden layer irreps for a non-linear readout.
+        Must be paired with `gate`.
+    gate : Optional[Callable], default=None
+        Activation function to apply in the hidden layer. Must be provided if
+        `hidden_irreps` is specified.
+    num_heads : int, default=1
+        Number of heads for multi-head masking. Only applied in non-linear blocks.
+    cueq_config : Optional[CuEquivarianceConfig], default=None
+        Configuration for CUDA-equivariant linear layers.
+    oeq_config : Optional[OEQConfig], default=None
+        Optional OEQ configuration (currently unused).
+
+    Raises
+    ------
+    ValueError
+        If only one of `hidden_irreps` or `gate` is provided, since both are required
+        for non-linear readout.
+    """
+
+    def __init__(
+        self,
+        irreps_in: o3.Irreps,
+        irrep_out: Optional[o3.Irreps] = None,
+        hidden_irreps: Optional[o3.Irreps] = None,
+        gate: Optional[Callable] = None,
+        num_heads: int = 1,
+        cueq_config: Optional[CuEquivarianceConfig] = None,
+        oeq_config: Optional[OEQConfig] = None,  # pylint: disable=unused-argument
+    ):
+        super().__init__()
+
+        # Set output irreps
+        self.irreps_out = irrep_out or o3.Irreps("0e")
+        self.num_heads = num_heads
+        self.hidden_irreps = hidden_irreps
+
+        if hidden_irreps is not None and gate is not None:
+            # Non-linear path
+            self.linear_1 = Linear(
+                irreps_in=irreps_in, irreps_out=hidden_irreps, cueq_config=cueq_config
+            )
+            self.non_linearity = nn.Activation(irreps_in=hidden_irreps, acts=[gate])
+            self.linear_2 = Linear(
+                irreps_in=hidden_irreps,
+                irreps_out=self.irreps_out,
+                cueq_config=cueq_config,
+            )
+        elif (hidden_irreps is None) != (gate is None):
+            raise ValueError(
+                "Both 'hidden_irreps' and 'gate' must be provided for non-linear readout."
+            )
+        else:
+            # Linear-only path
+            self.linear = Linear(
+                irreps_in=irreps_in, irreps_out=self.irreps_out, cueq_config=cueq_config
+            )
+
+    def forward(
+        self, x: torch.Tensor, heads: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
+        """
+        Forward pass of the readout block.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input tensor of shape [..., irreps_in.dim] representing node features.
+        heads : Optional[torch.Tensor], default=None
+            Optional tensor indicating multi-head assignments. Only used if
+            `num_heads > 1` in non-linear blocks.
+
+        Returns
+        -------
+        torch.Tensor
+            Output tensor of shape [..., irreps_out.dim], representing the readout
+            features.
+        """
+        if hasattr(self, "linear_1"):
+            x = self.non_linearity(self.linear_1(x))
+            if hasattr(self, "num_heads") and self.num_heads > 1 and heads is not None:
+                x = mask_head(x, heads, self.num_heads)
+            x = self.linear_2(x)
+        else:
+            x = self.linear(x)
+        return x
+
+
 @compile_mode("script")
 class LinearReadoutBlock(torch.nn.Module):
     def __init__(
