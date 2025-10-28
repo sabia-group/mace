@@ -162,7 +162,7 @@ class GeneralReadoutBlock(torch.nn.Module):
 
 
 @compile_mode("script")
-class LinearReadoutBlock(torch.nn.Module):
+class LinearReadoutBlock(GeneralReadoutBlock):
     def __init__(
         self,
         irreps_in: o3.Irreps,
@@ -170,22 +170,19 @@ class LinearReadoutBlock(torch.nn.Module):
         cueq_config: Optional[CuEquivarianceConfig] = None,
         oeq_config: Optional[OEQConfig] = None,  # pylint: disable=unused-argument
     ):
-        super().__init__()
-        self.linear = Linear(
-            irreps_in=irreps_in, irreps_out=irrep_out, cueq_config=cueq_config
+        super().__init__(
+            irreps_in=irreps_in,
+            irrep_out=irrep_out,
+            hidden_irreps=None,
+            gate=None,
+            cueq_config=cueq_config,
+            oeq_config=oeq_config,
         )
-
-    def forward(
-        self,
-        x: torch.Tensor,
-        heads: Optional[torch.Tensor] = None,  # pylint: disable=unused-argument
-    ) -> torch.Tensor:  # [n_nodes, irreps]  # [..., ]
-        return self.linear(x)  # [n_nodes, 1]
 
 
 @simplify_if_compile
 @compile_mode("script")
-class NonLinearReadoutBlock(torch.nn.Module):
+class NonLinearReadoutBlock(GeneralReadoutBlock):
     def __init__(
         self,
         irreps_in: o3.Irreps,
@@ -196,30 +193,20 @@ class NonLinearReadoutBlock(torch.nn.Module):
         cueq_config: Optional[CuEquivarianceConfig] = None,
         oeq_config: Optional[OEQConfig] = None,  # pylint: disable=unused-argument
     ):
-        super().__init__()
-        self.hidden_irreps = MLP_irreps
-        self.num_heads = num_heads
-        self.linear_1 = Linear(
-            irreps_in=irreps_in, irreps_out=self.hidden_irreps, cueq_config=cueq_config
+        super().__init__(
+            irreps_in=irreps_in,
+            hidden_irreps=MLP_irreps,
+            gate=gate,
+            irrep_out=irrep_out,
+            num_heads=num_heads,
+            cueq_config=cueq_config,
+            oeq_config=oeq_config,
         )
-        self.non_linearity = nn.Activation(irreps_in=self.hidden_irreps, acts=[gate])
-        self.linear_2 = Linear(
-            irreps_in=self.hidden_irreps, irreps_out=irrep_out, cueq_config=cueq_config
-        )
-
-    def forward(
-        self, x: torch.Tensor, heads: Optional[torch.Tensor] = None
-    ) -> torch.Tensor:  # [n_nodes, irreps]  # [..., ]
-        x = self.non_linearity(self.linear_1(x))
-        if hasattr(self, "num_heads"):
-            if self.num_heads > 1 and heads is not None:
-                x = mask_head(x, heads, self.num_heads)
-        return self.linear_2(x)  # [n_nodes, len(heads)]
 
 
 @simplify_if_compile
 @compile_mode("script")
-class NonLinearBiasReadoutBlock(torch.nn.Module):
+class NonLinearBiasReadoutBlock(GeneralReadoutBlock):
     def __init__(
         self,
         irreps_in: o3.Irreps,
@@ -230,177 +217,93 @@ class NonLinearBiasReadoutBlock(torch.nn.Module):
         cueq_config: Optional[CuEquivarianceConfig] = None,
         oeq_config: Optional[OEQConfig] = None,  # pylint: disable=unused-argument
     ):
-        super().__init__()
-        self.hidden_irreps = MLP_irreps
-        self.num_heads = num_heads
-        self.linear_1 = Linear(
-            irreps_in=irreps_in, irreps_out=self.hidden_irreps, cueq_config=cueq_config
+        super().__init__(
+            irreps_in=irreps_in,
+            hidden_irreps=MLP_irreps,
+            gate=gate,
+            irrep_out=irrep_out,
+            num_heads=num_heads,
+            cueq_config=cueq_config,
+            oeq_config=oeq_config,
         )
-        self.non_linearity = nn.Activation(irreps_in=self.hidden_irreps, acts=[gate])
-        self.linear_mid = o3.Linear(
-            irreps_in=self.hidden_irreps, irreps_out=self.hidden_irreps, biases=True
-        )
-        self.linear_2 = o3.Linear(
-            irreps_in=self.hidden_irreps, irreps_out=irrep_out, biases=True
-        )
-
-    def forward(
-        self, x: torch.Tensor, heads: Optional[torch.Tensor] = None
-    ) -> torch.Tensor:  # [n_nodes, irreps]  # [..., ]
-        x = self.non_linearity(self.linear_1(x))
-        x = self.non_linearity(self.linear_mid(x))
-        if hasattr(self, "num_heads"):
-            if self.num_heads > 1 and heads is not None:
-                x = mask_head(x, heads, self.num_heads)
-        return self.linear_2(x)  # [n_nodes, len(heads)]
 
 
 @compile_mode("script")
-class LinearDipoleReadoutBlock(torch.nn.Module):
+class LinearDipoleReadoutBlock(GeneralReadoutBlock):
     def __init__(
         self,
         irreps_in: o3.Irreps,
-        dipole_only: bool = False,
         cueq_config: Optional[CuEquivarianceConfig] = None,
         oeq_config: Optional[OEQConfig] = None,  # pylint: disable=unused-argument
     ):
-        super().__init__()
-        if dipole_only:
-            self.irreps_out = o3.Irreps("1x1o")
-        else:
-            self.irreps_out = o3.Irreps("1x0e + 1x1o")
-        self.linear = Linear(
-            irreps_in=irreps_in, irreps_out=self.irreps_out, cueq_config=cueq_config
+        super().__init__(
+            irreps_in,
+            irrep_out=o3.Irreps("1x1o"),
+            cueq_config=cueq_config,
+            oeq_config=oeq_config,
         )
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:  # [n_nodes, irreps]  # [..., ]
-        return self.linear(x)  # [n_nodes, 1]
 
 
 @compile_mode("script")
-class NonLinearDipoleReadoutBlock(torch.nn.Module):
+class NonLinearDipoleReadoutBlock(GeneralReadoutBlock):
     def __init__(
         self,
         irreps_in: o3.Irreps,
         MLP_irreps: o3.Irreps,
         gate: Callable,
-        dipole_only: bool = False,
+        num_heads: int = 1,
         cueq_config: Optional[CuEquivarianceConfig] = None,
         oeq_config: Optional[OEQConfig] = None,  # pylint: disable=unused-argument
     ):
-        super().__init__()
-        self.hidden_irreps = MLP_irreps
-        if dipole_only:
-            self.irreps_out = o3.Irreps("1x1o")
-        else:
-            self.irreps_out = o3.Irreps("1x0e + 1x1o")
-        irreps_scalars = o3.Irreps(
-            [(mul, ir) for mul, ir in MLP_irreps if ir.l == 0 and ir in self.irreps_out]
-        )
-        irreps_gated = o3.Irreps(
-            [(mul, ir) for mul, ir in MLP_irreps if ir.l > 0 and ir in self.irreps_out]
-        )
-        irreps_gates = o3.Irreps([mul, "0e"] for mul, _ in irreps_gated)
-        self.equivariant_nonlin = nn.Gate(
-            irreps_scalars=irreps_scalars,
-            act_scalars=[gate for _, ir in irreps_scalars],
-            irreps_gates=irreps_gates,
-            act_gates=[gate] * len(irreps_gates),
-            irreps_gated=irreps_gated,
-        )
-        self.irreps_nonlin = self.equivariant_nonlin.irreps_in.simplify()
-        self.linear_1 = Linear(
-            irreps_in=irreps_in, irreps_out=self.irreps_nonlin, cueq_config=cueq_config
-        )
-        self.linear_2 = Linear(
-            irreps_in=self.hidden_irreps,
-            irreps_out=self.irreps_out,
+        super().__init__(
+            irreps_in=irreps_in,
+            hidden_irreps=MLP_irreps,
+            gate=gate,
+            irrep_out=o3.Irreps("1x1o"),
+            num_heads=num_heads,
             cueq_config=cueq_config,
+            oeq_config=oeq_config,
         )
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:  # [n_nodes, irreps]  # [..., ]
-        x = self.equivariant_nonlin(self.linear_1(x))
-        return self.linear_2(x)  # [n_nodes, 1]
 
 
 @compile_mode("script")
-class LinearDipolePolarReadoutBlock(torch.nn.Module):
+class LinearDipolePolarReadoutBlock(GeneralReadoutBlock):
     def __init__(
         self,
         irreps_in: o3.Irreps,
-        use_polarizability: bool = True,
         cueq_config: Optional[CuEquivarianceConfig] = None,
         oeq_config: Optional[OEQConfig] = None,  # pylint: disable=unused-argument
     ):
-        super().__init__()
-        if use_polarizability:
-            print("You will calculate the polarizability and dipole.")
-            self.irreps_out = o3.Irreps("2x0e + 1x1o + 1x2e")
-        else:
-            raise ValueError(
-                "Invalid configuration for LinearDipolePolarReadoutBlock: "
-                "use_polarizability must be either True."
-                "If you want to calculate only the dipole, use AtomicDipolesMACE."
-            )
-
-        self.linear = Linear(
-            irreps_in=irreps_in, irreps_out=self.irreps_out, cueq_config=cueq_config
+        super().__init__(
+            irreps_in=irreps_in,
+            irrep_out=o3.Irreps("2x0e + 1x1o + 1x2e"),
+            hidden_irreps=None,
+            gate=None,
+            cueq_config=cueq_config,
+            oeq_config=oeq_config,
         )
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:  # [n_nodes, irreps]  # [..., ]
-        y = self.linear(x)  # [n_nodes, 1]
-        return y  # [n_nodes, 1]
 
 
 @compile_mode("script")
-class NonLinearDipolePolarReadoutBlock(torch.nn.Module):
+class NonLinearDipolePolarReadoutBlock(GeneralReadoutBlock):
     def __init__(
         self,
         irreps_in: o3.Irreps,
         MLP_irreps: o3.Irreps,
         gate: Callable,
-        use_polarizability: bool = True,
+        num_heads: int = 1,
         cueq_config: Optional[CuEquivarianceConfig] = None,
         oeq_config: Optional[OEQConfig] = None,  # pylint: disable=unused-argument
     ):
-        super().__init__()
-        self.hidden_irreps = MLP_irreps
-        if use_polarizability:
-            print("You will calculate the polarizability and dipole.")
-            self.irreps_out = o3.Irreps("2x0e + 1x1o + 1x2e")
-        else:
-            raise ValueError(
-                "Invalid configuration for NonLinearDipolePolarReadoutBlock: "
-                "use_polarizability must be either True."
-                "If you want to calculate only the dipole, use AtomicDipolesMACE."
-            )
-        irreps_scalars = o3.Irreps(
-            [(mul, ir) for mul, ir in MLP_irreps if ir.l == 0 and ir in self.irreps_out]
-        )
-        irreps_gated = o3.Irreps(
-            [(mul, ir) for mul, ir in MLP_irreps if ir.l > 0 and ir in self.irreps_out]
-        )
-        irreps_gates = o3.Irreps([mul, "0e"] for mul, _ in irreps_gated)
-        self.equivariant_nonlin = nn.Gate(
-            irreps_scalars=irreps_scalars,
-            act_scalars=[gate for _, ir in irreps_scalars],
-            irreps_gates=irreps_gates,
-            act_gates=[gate] * len(irreps_gates),
-            irreps_gated=irreps_gated,
-        )
-        self.irreps_nonlin = self.equivariant_nonlin.irreps_in.simplify()
-        self.linear_1 = Linear(
-            irreps_in=irreps_in, irreps_out=self.irreps_nonlin, cueq_config=cueq_config
-        )
-        self.linear_2 = Linear(
-            irreps_in=self.hidden_irreps,
-            irreps_out=self.irreps_out,
+        super().__init__(
+            irreps_in=irreps_in,
+            hidden_irreps=MLP_irreps,
+            gate=gate,
+            irrep_out=o3.Irreps("2x0e + 1x1o + 1x2e"),
+            num_heads=num_heads,
             cueq_config=cueq_config,
+            oeq_config=oeq_config,
         )
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:  # [n_nodes, irreps]  # [..., ]
-        x = self.equivariant_nonlin(self.linear_1(x))
-        return self.linear_2(x)  # [n_nodes, 1]
 
 
 @compile_mode("script")

@@ -707,9 +707,7 @@ class AtomicDipolesMACE(torch.nn.Module):
 
         self.readouts = torch.nn.ModuleList()
         self.readouts.append(
-            LinearDipoleReadoutBlock(
-                hidden_irreps, dipole_only=True, cueq_config=cueq_config
-            )
+            LinearDipoleReadoutBlock(hidden_irreps, cueq_config=cueq_config)
         )
 
         for i in range(num_interactions - 1):
@@ -749,15 +747,12 @@ class AtomicDipolesMACE(torch.nn.Module):
                         hidden_irreps_out,
                         MLP_irreps,
                         gate,
-                        dipole_only=True,
                         cueq_config=cueq_config,
                     )
                 )
             else:
                 self.readouts.append(
-                    LinearDipoleReadoutBlock(
-                        hidden_irreps, dipole_only=True, cueq_config=cueq_config
-                    )
+                    LinearDipoleReadoutBlock(hidden_irreps, cueq_config=cueq_config)
                 )
 
     def forward(
@@ -953,9 +948,7 @@ class AtomicDielectricMACE(torch.nn.Module):
         self.products = torch.nn.ModuleList([prod])
 
         self.readouts = torch.nn.ModuleList()
-        self.readouts.append(
-            LinearDipolePolarReadoutBlock(hidden_irreps, use_polarizability=True)
-        )
+        self.readouts.append(LinearDipolePolarReadoutBlock(hidden_irreps))
 
         for i in range(num_interactions - 1):
             if i == num_interactions - 2:
@@ -993,22 +986,13 @@ class AtomicDielectricMACE(torch.nn.Module):
             if i == num_interactions - 2:
                 self.readouts.append(
                     NonLinearDipolePolarReadoutBlock(
-                        hidden_irreps_out,
-                        MLP_irreps,
-                        gate,
-                        use_polarizability=True,
+                        hidden_irreps_out, MLP_irreps, gate
                     )
                 )
                 # print("Nonlinear irrpes: ", hidden_irreps_out, MLP_irreps)
                 # exit()
             else:
-                self.readouts.append(
-                    LinearDipolePolarReadoutBlock(
-                        hidden_irreps,
-                        # use_charge=True,
-                        use_polarizability=True,
-                    )
-                )
+                self.readouts.append(LinearDipolePolarReadoutBlock(hidden_irreps))
 
     def forward(
         self,
@@ -1251,9 +1235,7 @@ class EnergyDipoleMACE(torch.nn.Module):
 
         self.readouts = torch.nn.ModuleList()
         self.readouts.append(
-            LinearDipoleReadoutBlock(
-                hidden_irreps, dipole_only=False, cueq_config=cueq_config
-            )
+            LinearDipoleReadoutBlock(hidden_irreps, cueq_config=cueq_config)
         )
 
         for i in range(num_interactions - 1):
@@ -1293,15 +1275,12 @@ class EnergyDipoleMACE(torch.nn.Module):
                         hidden_irreps_out,
                         MLP_irreps,
                         gate,
-                        dipole_only=False,
                         cueq_config=cueq_config,
                     )
                 )
             else:
                 self.readouts.append(
-                    LinearDipoleReadoutBlock(
-                        hidden_irreps, dipole_only=False, cueq_config=cueq_config
-                    )
+                    LinearDipoleReadoutBlock(hidden_irreps, cueq_config=cueq_config)
                 )
 
     def forward(
