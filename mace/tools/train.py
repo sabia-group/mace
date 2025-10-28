@@ -656,7 +656,7 @@ class MACELoss(Metric):
                 "yes",
                 "on",
             ):
-                from mace.modules.utils import shift_ref_dipole
+                from mace.tools.utils import shift_ref_dipole
 
                 batch.dipole = shift_ref_dipole(
                     batch.cell, batch.pbc, batch.dipole, output["dipole"]
