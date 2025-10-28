@@ -957,6 +957,12 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
             "forces_weight",
         ],
     )
+    parser.add_argument(
+        "--use_pbc_dipole",
+        help="Use a periodic loss for the dipole (available only if all structures are periodic)",
+        action="store_true",
+        default=False,
+    )
     return parser
 
 
