@@ -708,7 +708,19 @@ def wrap01(x: torch.Tensor) -> torch.Tensor:
 def shift_ref_dipole(
     cell: torch.Tensor, pbc: torch.Tensor, ref: torch.Tensor, pred: torch.Tensor
 ) -> torch.Tensor:
+    """
+    Adjusts the reference dipole positions under periodic boundary conditions (PBC)
+    so that the reference and predicted dipoles are PBC-consistent.
 
+    Args:
+        cell: Tensor of shape (N, 3, 3) representing the simulation cell vectors.
+        pbc: Tensor of shape (N, 3) indicating periodicity along each axis.
+        ref: Reference dipole tensor of shape (N, 3).
+        pred: Predicted dipole tensor of shape (N, 3).
+
+    Returns:
+        Updated reference dipole tensor with PBC-consistent shifts applied.
+    """
     i = ~torch.any(torch.isnan(ref), dim=1)
     delta = ref - pred
     final_delta = pbc_dipole(cell, pbc, delta[i], i)
@@ -732,8 +744,24 @@ def pbc_dipole(
     i: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
     """
-    Computes a PBC-invariant dipole loss.
-    Assumes 3D periodicity (pbc = [1,1,1] or True,True,True).
+    Applies periodic boundary conditions (PBC) to displacement vectors to ensure
+    dipole calculations remain invariant under quantum polarization jumps in
+    periodic systems.
+
+    The function maps each displacement (`delta`) to its nearest periodic image
+    using the provided cell vectors and periodicity flags.
+
+    Note:
+        Only fully 3D periodic systems are currently supported.
+
+    Args:
+        cell: Tensor of shape (N, 3, 3) containing the lattice vectors for each structure.
+        pbc: Tensor of shape (N, 3) specifying periodicity along x, y, and z (must all be True).
+        delta: Tensor of shape (N, 3) representing displacement vectors.
+        i: Optional boolean mask tensor selecting valid structures.
+
+    Returns:
+        Tensor of shape (N, 3) containing PBC-corrected displacement vectors.
     """
     # Select relevant structures
     cell = torch.reshape(cell, (-1, 3, 3))[i]
