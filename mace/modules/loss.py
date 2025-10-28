@@ -10,9 +10,9 @@ from typing import Callable, Optional
 import torch
 import torch.distributed as dist
 
+from mace.modules.utils import pbc_dipole
 from mace.tools import TensorDict
 from mace.tools.torch_geometric import Batch
-from mace.modules.utils import pbc_dipole
 
 
 # ------------------------------------------------------------------------------
