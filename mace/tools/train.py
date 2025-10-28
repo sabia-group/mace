@@ -648,6 +648,20 @@ class MACELoss(Metric):
                 batch, self.delta_virials, batch.weight, batch.virials_weight
             )
         if output.get("dipole") is not None and batch.dipole is not None:
+            import os
+
+            if os.environ.get("USE_PBC_DIPOLE", "false").lower() in (
+                "1",
+                "true",
+                "yes",
+                "on",
+            ):
+                from mace.modules.utils import shift_ref_dipole
+
+                batch.dipole = shift_ref_dipole(
+                    batch.cell, batch.pbc, batch.dipole, output["dipole"]
+                )
+
             self.mus.append(batch.dipole)
             self.delta_mus.append(batch.dipole - output["dipole"])
             self.delta_mus_per_atom.append(

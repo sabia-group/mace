@@ -722,21 +722,17 @@ class InferenceMetric(Metric):
         if output.get("dipole") is not None and batch.dipole is not None:
             import os
 
-            if os.environ.get("pbc_dipole_loss", False):
-                from mace.modules.loss import pbc_dipole, wrap05
+            if os.environ.get("USE_PBC_DIPOLE", "false").lower() in (
+                "1",
+                "true",
+                "yes",
+                "on",
+            ):
+                from mace.modules.utils import shift_ref_dipole
 
-                i = ~torch.any(torch.isnan(batch.dipole), dim=1)
-                delta = batch.dipole - output["dipole"]
-                final_delta = pbc_dipole(batch.cell, batch.pbc, delta[i], i)
-
-                icell = torch.linalg.inv(batch.cell.reshape((-1, 3, 3)))
-                shift = final_delta - delta[i]
-                batch.dipole[i] = batch.dipole[i] + shift
-
-                # debug
-                frac = torch.einsum("ijk,ik->ij", icell[i], shift)
-                frac = wrap05(frac)
-                assert torch.allclose(frac, torch.tensor(0.0)), "coding error"
+                batch.dipole = shift_ref_dipole(
+                    batch.cell, batch.pbc, batch.dipole, output["dipole"]
+                )
 
             self.ref_dipole.append(batch.dipole)
             self.pred_dipole.append(output["dipole"])
