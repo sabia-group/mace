@@ -1,9 +1,3 @@
-###########################################################################################
-# Script for evaluating configurations contained in an xyz file with a trained model
-# Authors: Ilyes Batatia, Gregor Simm
-# This program is distributed under the MIT License (see MIT.md)
-###########################################################################################
-
 import argparse
 import warnings
 from typing import Dict, List
@@ -189,6 +183,7 @@ def run(args: argparse.Namespace) -> None:
 
         # reshape results
         for key in output.keys():
+
             if key not in ase_like_properties:
                 warnings.warn(
                     f"Please add '{key}' to 'ase_like_properties' in {__file__}"
@@ -197,16 +192,22 @@ def run(args: argparse.Namespace) -> None:
 
             value = output[key]
             shape = ase_like_properties[key]
+            if key not in results:
+                results[key] = [None] * len(n_atoms)
+
+            ki = k
             if "natoms" in shape:
                 # [n_nodes,...] --> [ [n_atoms_0,...] , [n_atoms_1,...], ... ]
                 value = np.split(value, batch.ptr[1:], axis=0)[:-1]
-                ki = k
                 for v in value:
                     assert v.shape[0] == n_atoms[ki], "coding error"
-                    if key not in results:
-                        results[key] = [None] * len(n_atoms)
                     results[key][ki] = v
                     ki += 1
+            else:
+                for v in value:
+                    results[key][ki] = v
+                    ki += 1
+
         k = ki
 
     # save results in ase.Atoms
