@@ -260,9 +260,13 @@ class Contraction(torch.nn.Module):
 
 
 class EmptyParam(torch.nn.Parameter):
-    def __new__(cls, data):  # pylint: disable=signature-differs
+    def __new__(cls, data, *args, **kwargs):  # Accept extra args
         zero = torch.zeros_like(data)
         return super().__new__(cls, zero, requires_grad=False)
 
     def requires_grad_(self):
         return self
+
+    def __deepcopy__(self, memo):
+        # Ensure deepcopy works
+        return EmptyParam(self.data.clone())
