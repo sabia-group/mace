@@ -211,7 +211,7 @@ def create_lmdb_dataset(atoms_list, folder_path, head_name="Default"):
     return folder_path
 
 
-@pytest.mark.slow
+# @pytest.mark.slow
 def test_multifile_training():
     """Test training with multiple file formats per head"""
     # Create temporary directory
@@ -418,7 +418,7 @@ def test_multifile_training():
         shutil.rmtree(temp_dir)
 
 
-@pytest.mark.slow
+# @pytest.mark.slow
 def test_multiple_xyz_per_head():
     """Test training with multiple XYZ files per head for train, valid and test sets"""
     # Create temporary directory
@@ -611,7 +611,7 @@ def test_multiple_xyz_per_head():
         shutil.rmtree(temp_dir)
 
 
-@pytest.mark.slow
+# @pytest.mark.slow
 def test_single_xyz_per_head():
     """Test training with multiple XYZ files per head for train, valid and test sets"""
     # Create temporary directory
@@ -804,7 +804,7 @@ def test_single_xyz_per_head():
         shutil.rmtree(temp_dir)
 
 
-@pytest.mark.slow
+# @pytest.mark.slow
 def test_multihead_finetuning_different_formats():
     """Test multihead finetuning with different file formats for each head."""
     # Create temporary directory
