@@ -266,3 +266,7 @@ class EmptyParam(torch.nn.Parameter):
 
     def requires_grad_(self):
         return self
+
+    def __deepcopy__(self, memo):
+        # Ensure deepcopy works
+        return EmptyParam(self.data.clone())
