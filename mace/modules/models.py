@@ -1364,7 +1364,8 @@ class EnergyDipoleMACE(torch.nn.Module):
         n_components = 4
         num_interactions = len(self.interactions)
         attributes = torch.zeros(
-            (num_nodes, num_interactions + 1, n_components)
+            (num_nodes, num_interactions + 1, n_components),
+            device=data["positions"].device,
         )  # [n_nodes,n_contributions,n_components]
         attributes[:, 0, 0] = node_e0
         for n, (interaction, product, readout) in enumerate(
