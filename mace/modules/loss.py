@@ -69,8 +69,8 @@ def general_loss_with_nan(
         return torch.tensor(0.0, device=ref.device, dtype=ref.dtype)
 
     # Ensure num_atoms is broadcastable or masked properly
-    if num_atoms is None:
-        num_atoms = torch.ones_like(ref)
+    # if num_atoms is None:
+    #     num_atoms = torch.ones_like(ref)
 
     # Masked computation
     safe_ref = ref[ii]
@@ -89,13 +89,6 @@ def general_loss_with_nan(
 # ------------------------------------------------------------------------------
 # Energy Loss Functions
 # ------------------------------------------------------------------------------
-
-
-def mean_squared_error_energy(
-    ref: Batch, pred: TensorDict, ddp: Optional[bool] = None
-) -> torch.Tensor:
-    raw_loss = torch.square(ref["energy"] - pred["energy"])
-    return reduce_loss(raw_loss, ddp)
 
 
 def weighted_mean_squared_error_energy(
@@ -155,7 +148,7 @@ def weighted_mean_squared_stress(
         configs_stress_weight,
         ref["stress"],
         pred["stress"],
-        lambda x, a, i: torch.square(x / a),
+        lambda x, a, i: torch.square(x),
     )
     # ii = ~torch.isnan(ref["stress"])
     # raw_loss = (
@@ -209,7 +202,7 @@ def mean_squared_error_forces(
         configs_forces_weight,
         ref["forces"],
         pred["forces"],
-        lambda x, a, i: torch.square(x / a),
+        lambda x, a, i: torch.square(x),
     )
     # ii = ~torch.isnan(ref["forces"]).any(dim=-1)
     # raw_loss = (
