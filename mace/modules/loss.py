@@ -69,8 +69,8 @@ def general_loss_with_nan(
         return torch.tensor(0.0, device=ref.device, dtype=ref.dtype)
 
     # Ensure num_atoms is broadcastable or masked properly
-    # if num_atoms is None:
-    #     num_atoms = torch.ones_like(ref)
+    if num_atoms is None:
+        num_atoms = torch.ones_like(ref)
 
     # Masked computation
     safe_ref = ref[ii]
