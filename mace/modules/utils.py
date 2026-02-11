@@ -91,10 +91,9 @@ def get_symmetric_displacement(
         device=positions.device,
     )
     displacement.requires_grad_(True)
-    symmetric_displacement = displacement
-    # 0.5 * (
-    #     displacement + displacement.transpose(-1, -2)
-    # )  # From https://github.com/mir-group/nequip
+    symmetric_displacement = 0.5 * (
+        displacement + displacement.transpose(-1, -2)
+    )  # From https://github.com/mir-group/nequip
     positions = positions + torch.einsum(
         "be,bec->bc", positions, symmetric_displacement[batch]
     )
