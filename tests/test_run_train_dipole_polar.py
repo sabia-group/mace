@@ -64,8 +64,8 @@ def _fitting_config(with_nan=False):
         c.new_array("REF_forces", np.random.normal(0.1, size=c.positions.shape))
         c.info["REF_stress"] = np.random.normal(0.1, size=6)
         c.info["REF_dipoles"] = np.random.normal(0.1, size=(3))
-        c.info["REF_polarizability"] = np.random.normal(0.1, size=(3, 3))
-
+        c.info["REF_polarizability"] = np.random.normal(0.1, size=(3,3))
+        
         fit_configs.append(c)
 
     return fit_configs
@@ -84,8 +84,8 @@ def fixture_pretraining_configs():
         atoms.info["REF_energy"] = np.random.normal(0, 1)
         atoms.arrays["REF_forces"] = np.random.normal(0, 1, size=(3, 3))
         atoms.info["REF_stress"] = np.random.normal(0, 1, size=6)
-        atoms.info["REF_dipoles"] = np.random.normal(0.1, size=(3))
-        atoms.info["REF_polarizability"] = np.random.normal(0.1, size=(3, 3))
+        atoms.info["REF_dipoles"]= np.random.normal(0.1, size=(3))
+        atoms.info["REF_polarizability"]= np.random.normal(0.1, size=(3,3))
         configs.append(atoms)
     configs.append(
         Atoms(numbers=[8], positions=[[0, 0, 0]], cell=[6] * 3, pbc=[True] * 3),
@@ -97,9 +97,8 @@ def fixture_pretraining_configs():
     configs[-2].info["config_type"] = "IsolatedAtom"
     configs[-1].info["REF_energy"] = -4.0
     configs[-1].info["config_type"] = "IsolatedAtom"
-    return configs
-
-# ----------------------------- #
+    return configs 
+    
 _mace_params_dipole = {
     "name": "DipolesMACE",
     "valid_fraction": 0.05,
@@ -175,10 +174,7 @@ def _run_train_dipole(tmp_path, fitting_configs,compare):
     for at in fitting_configs:
         at.calc = calc
         Mus.append(at.get_dipole_moment())
-        
-    if not compare:
-        return
-
+    
     print("Mus", Mus)
     # Obtained for MACE from the 08/08/2025
     ref_Mus = [
@@ -208,7 +204,6 @@ def _run_train_dipole(tmp_path, fitting_configs,compare):
 
     assert np.allclose(Mus, ref_Mus)
 
-# # ----------------------------- #
 _mace_params_dipole_polar = {
     "name": "DielectricMACE",
     "valid_fraction": 0.05,
@@ -288,11 +283,7 @@ def _run_train_dipole_polar(tmp_path, fitting_configs,compare):
         at.calc = calc
         Mus.append(at.get_dipole_moment())
         alphas.append(calc.get_property("polarizability", at))
-        
-    if not compare:
-        return
-    
-    # Obtained for MACE from the 08/08/2025
+    # Obtained for MACE from the 08/08/2025 
     ref_Mus = [
         np.array([0.0, 0.0, 0.0]),
         np.array([0.0, 0.0, 0.0]),
@@ -465,6 +456,4 @@ def _run_train_dipole_polar(tmp_path, fitting_configs,compare):
 
     assert np.allclose(Mus, ref_Mus)
     assert np.allclose(alphas, ref_alphas)
-
-if __name__ == "__main__":
-    pytest.main([__file__])
+    
