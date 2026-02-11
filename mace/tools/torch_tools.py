@@ -104,6 +104,15 @@ def cartesian_to_spherical(t: torch.Tensor):
     return stress_cart_tensor.to_cartesian(t, rtp=stress_rtp)
 
 
+def check_symmetric(t: torch.Tensor):
+    anti = t - t.T
+    norm = torch.abs(anti).sum()
+    if norm > 1e-6:
+        raise ValueError(
+            f"The provided tensor should be symmetric, but its antisymmetric part has norm {norm}"
+        )
+
+
 def voigt_to_matrix(t: torch.Tensor):
     """
     Convert voigt notation to matrix notation
@@ -111,6 +120,7 @@ def voigt_to_matrix(t: torch.Tensor):
     :return: (3, 3) tensor
     """
     if t.shape == (3, 3):
+        check_symmetric(t)
         return t
     if t.shape == (6,):
         return torch.tensor(
@@ -122,7 +132,9 @@ def voigt_to_matrix(t: torch.Tensor):
             dtype=t.dtype,
         )
     if t.shape == (9,):
-        return t.view(3, 3)
+        t = t.view(3, 3)
+        check_symmetric(t)
+        return t
 
     raise ValueError(
         f"Stress tensor must be of shape (6,) or (3, 3), or (9,) but has shape {t.shape}"
