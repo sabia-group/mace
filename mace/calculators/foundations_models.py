@@ -141,16 +141,16 @@ def mace_mp(
     Returns:
         MACECalculator: trained on the MPtrj dataset (unless model otherwise specified).
     """
-    try:
-        if model in mace_mp_names or str(model).startswith("https:"):
-            model_path = download_mace_mp_checkpoint(model)
-            print(f"Using Materials Project MACE for MACECalculator with {model_path}")
-        else:
-            if not Path(model).exists():
-                raise FileNotFoundError(f"{model} not found locally")
-            model_path = model
-    except Exception as exc:
-        raise RuntimeError("Model download failed and no local model found") from exc
+    # try:
+    if model in mace_mp_names or str(model).startswith("https:"):
+        model_path = download_mace_mp_checkpoint(model)
+        print(f"Using Materials Project MACE for MACECalculator with {model_path}")
+    else:
+        if not Path(model).exists():
+            raise FileNotFoundError(f"{model} not found locally")
+        model_path = model
+    # except Exception as exc:
+    #     raise RuntimeError("Model download failed and no local model found") from exc
 
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
     if default_dtype == "float64":
@@ -228,43 +228,43 @@ def mace_off(
     Returns:
         MACECalculator: trained on the MACE-OFF23 dataset
     """
-    try:
-        if model in (None, "small", "medium", "large") or str(model).startswith(
-            "https:"
-        ):
-            urls = dict(
-                small="https://github.com/ACEsuit/mace-off/blob/main/mace_off23/MACE-OFF23_small.model?raw=true",
-                medium="https://github.com/ACEsuit/mace-off/raw/main/mace_off23/MACE-OFF23_medium.model?raw=true",
-                large="https://github.com/ACEsuit/mace-off/blob/main/mace_off23/MACE-OFF23_large.model?raw=true",
+    # try:
+    if model in (None, "small", "medium", "large") or str(model).startswith(
+        "https:"
+    ):
+        urls = dict(
+            small="https://github.com/ACEsuit/mace-off/blob/main/mace_off23/MACE-OFF23_small.model?raw=true",
+            medium="https://github.com/ACEsuit/mace-off/raw/main/mace_off23/MACE-OFF23_medium.model?raw=true",
+            large="https://github.com/ACEsuit/mace-off/blob/main/mace_off23/MACE-OFF23_large.model?raw=true",
+        )
+        checkpoint_url = (
+            urls.get(model, urls["medium"])
+            if model in (None, "small", "medium", "large")
+            else model
+        )
+        cache_dir = get_cache_dir()
+        checkpoint_url_name = os.path.basename(checkpoint_url).split("?")[0]
+        cached_model_path = f"{cache_dir}/{checkpoint_url_name}"
+        if not os.path.isfile(cached_model_path):
+            os.makedirs(cache_dir, exist_ok=True)
+            # download and save to disk
+            print(f"Downloading MACE model from {checkpoint_url!r}")
+            print(
+                "The model is distributed under the Academic Software License (ASL) license, see https://github.com/gabor1/ASL \n To use the model you accept the terms of the license."
             )
-            checkpoint_url = (
-                urls.get(model, urls["medium"])
-                if model in (None, "small", "medium", "large")
-                else model
+            print(
+                "ASL is based on the Gnu Public License, but does not permit commercial use"
             )
-            cache_dir = get_cache_dir()
-            checkpoint_url_name = os.path.basename(checkpoint_url).split("?")[0]
-            cached_model_path = f"{cache_dir}/{checkpoint_url_name}"
-            if not os.path.isfile(cached_model_path):
-                os.makedirs(cache_dir, exist_ok=True)
-                # download and save to disk
-                print(f"Downloading MACE model from {checkpoint_url!r}")
-                print(
-                    "The model is distributed under the Academic Software License (ASL) license, see https://github.com/gabor1/ASL \n To use the model you accept the terms of the license."
-                )
-                print(
-                    "ASL is based on the Gnu Public License, but does not permit commercial use"
-                )
-                urllib.request.urlretrieve(checkpoint_url, cached_model_path)
-                print(f"Cached MACE model to {cached_model_path}")
-            model = cached_model_path
-            msg = f"Using MACE-OFF23 MODEL for MACECalculator with {model}"
-            print(msg)
-        else:
-            if not Path(model).exists():
-                raise FileNotFoundError(f"{model} not found locally")
-    except Exception as exc:
-        raise RuntimeError("Model download failed and no local model found") from exc
+            urllib.request.urlretrieve(checkpoint_url, cached_model_path)
+            print(f"Cached MACE model to {cached_model_path}")
+        model = cached_model_path
+        msg = f"Using MACE-OFF23 MODEL for MACECalculator with {model}"
+        print(msg)
+    else:
+        if not Path(model).exists():
+            raise FileNotFoundError(f"{model} not found locally")
+    # except Exception as exc:
+    #     raise RuntimeError("Model download failed and no local model found") from exc
 
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -389,40 +389,40 @@ def mace_omol(
         "extra_large": "https://github.com/ACEsuit/mace-foundations/releases/download/mace_omol_0/MACE-omol-0-extra-large-1024.model"
     }
 
-    try:
-        if model is None or model == "extra_large":
-            checkpoint_url = urls["extra_large"]
-        elif isinstance(model, str) and model.startswith("https:"):
-            checkpoint_url = model
-        elif isinstance(model, (str, Path)) and Path(model).exists():
-            checkpoint_url = str(model)
-        else:
-            raise ValueError(
-                f"Invalid model specification: {model}. "
-                f"Supported options: {list(urls.keys())}, a local file path, or a direct URL."
+    # try:
+    if model is None or model == "extra_large":
+        checkpoint_url = urls["extra_large"]
+    elif isinstance(model, str) and model.startswith("https:"):
+        checkpoint_url = model
+    elif isinstance(model, (str, Path)) and Path(model).exists():
+        checkpoint_url = str(model)
+    else:
+        raise ValueError(
+            f"Invalid model specification: {model}. "
+            f"Supported options: {list(urls.keys())}, a local file path, or a direct URL."
+        )
+
+    if checkpoint_url.startswith("http"):
+        cache_dir = get_cache_dir()
+        os.makedirs(cache_dir, exist_ok=True)
+        checkpoint_url_name = os.path.basename(checkpoint_url).split("?")[0]
+        cached_model_path = os.path.join(cache_dir, checkpoint_url_name)
+
+        if not os.path.isfile(cached_model_path):
+            print(f"Downloading MACE model from {checkpoint_url!r}")
+            print(
+                "The model is distributed under the Academic Software License (ASL), see https://github.com/gabor1/ASL\n"
+                "To use the model, you accept the terms of the license.\n"
+                "ASL is based on the GNU Public License, but does not permit commercial use."
             )
+            urllib.request.urlretrieve(checkpoint_url, cached_model_path)
+            print(f"Cached MACE model to {cached_model_path}")
+        model = cached_model_path
+    else:
+        model = checkpoint_url
 
-        if checkpoint_url.startswith("http"):
-            cache_dir = get_cache_dir()
-            os.makedirs(cache_dir, exist_ok=True)
-            checkpoint_url_name = os.path.basename(checkpoint_url).split("?")[0]
-            cached_model_path = os.path.join(cache_dir, checkpoint_url_name)
-
-            if not os.path.isfile(cached_model_path):
-                print(f"Downloading MACE model from {checkpoint_url!r}")
-                print(
-                    "The model is distributed under the Academic Software License (ASL), see https://github.com/gabor1/ASL\n"
-                    "To use the model, you accept the terms of the license.\n"
-                    "ASL is based on the GNU Public License, but does not permit commercial use."
-                )
-                urllib.request.urlretrieve(checkpoint_url, cached_model_path)
-                print(f"Cached MACE model to {cached_model_path}")
-            model = cached_model_path
-        else:
-            model = checkpoint_url
-
-    except Exception as exc:
-        raise RuntimeError("Model download failed and no local model found") from exc
+    # except Exception as exc:
+    #     raise RuntimeError("Model download failed and no local model found") from exc
 
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
 
