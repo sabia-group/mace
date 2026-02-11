@@ -28,15 +28,38 @@ pytest_mace_dir = Path(__file__).parent.parent
 run_train = Path(__file__).parent.parent / "mace" / "cli" / "run_train.py"
 
 
+def write_extxyz_test(tmp_path, atoms):
+    assert isinstance(
+        atoms, Atoms
+    ), "write_extxyz_test only working for Atoms, not anything else such as list(Atoms)"
+    ase.io.write(tmp_path / "test.extxyz", atoms)
+    atoms_written = ase.io.read(tmp_path / "test.extxyz")
+
+    nonstd_fields = set(
+        [
+            "node_energy",
+            "energy_var",
+            "energy_comm",
+            "stress_var",
+            "stress_comm",
+            "forces_var",
+            "forces_comm",
+            "virials",
+        ]
+    )
+    # everything that we expect has been written
+    assert set(atoms.calc.results.keys()) - nonstd_fields == set(
+        atoms_written.calc.results.keys()
+    )
+    # everything that was written was correct
+    assert all(
+        np.allclose(atoms.calc.results[k], atoms_written.calc.results[k])
+        for k in atoms_written.calc.results
+    )
+
+
 @pytest.fixture(scope="module", name="fitting_configs")
 def fitting_configs_fixture():
-    return _fitting_config(with_nan=False)
-
-@pytest.fixture(scope="module", name="fitting_configs_nan")
-def fitting_configs_fixture_nan():
-    return _fitting_config(with_nan=True)
-    
-def _fitting_config(with_nan: bool = False):
     water = Atoms(
         numbers=[8, 1, 1],
         positions=[[0, -2.0, 0], [1, 0, 0], [0, 1, 0]],
@@ -51,15 +74,6 @@ def _fitting_config(with_nan: bool = False):
     fit_configs[0].info["config_type"] = "IsolatedAtom"
     fit_configs[1].info["REF_energy"] = -0.5
     fit_configs[1].info["config_type"] = "IsolatedAtom"
-    
-    if with_nan:
-        np.random.seed(0)
-        c = water.copy()
-        c.positions += np.random.normal(0.1, size=c.positions.shape)
-        c.info["REF_energy"] = np.nan
-        c.new_array("REF_forces", np.full(c.positions.shape,np.nan))
-        c.info["REF_stress"] = np.full(6,np.nan)
-        fit_configs.append(c)
 
     np.random.seed(5)
     for _ in range(20):
@@ -74,16 +88,9 @@ def _fitting_config(with_nan: bool = False):
 
     return fit_configs
 
-# ----------------------------- #
+
 @pytest.fixture(scope="module", name="trained_model")
 def trained_model_fixture(tmp_path_factory, fitting_configs):
-    return _model_fixture(tmp_path_factory, fitting_configs)
-    
-@pytest.fixture(scope="module", name="trained_model_nan")
-def trained_model_fixture_nan(tmp_path_factory, fitting_configs_nan):
-    return _model_fixture(tmp_path_factory, fitting_configs_nan)
-    
-def _model_fixture(tmp_path_factory, fitting_configs):
     _mace_params = {
         "name": "MACE",
         "valid_fraction": 0.05,
@@ -144,7 +151,7 @@ def _model_fixture(tmp_path_factory, fitting_configs):
 
     return MACECalculator(model_paths=tmp_path / "MACE.model", device="cpu")
 
-# ----------------------------- #
+
 @pytest.fixture(scope="module", name="trained_equivariant_model")
 def trained_model_equivariant_fixture(tmp_path_factory, fitting_configs):
     _mace_params = {
@@ -277,13 +284,6 @@ def trained_model_equivariant_fixture_cueq(tmp_path_factory, fitting_configs):
 
 @pytest.fixture(scope="module", name="trained_dipole_model")
 def trained_dipole_fixture(tmp_path_factory, fitting_configs):
-    return _dipole_fixture(tmp_path_factory, fitting_configs)
-
-@pytest.fixture(scope="module", name="trained_dipole_model_nan")
-def trained_dipole_model_nan(tmp_path_factory, fitting_configs_nan):
-    return _dipole_fixture(tmp_path_factory, fitting_configs_nan)
-    
-def _dipole_fixture(tmp_path_factory, fitting_configs):
     _mace_params = {
         "name": "MACE",
         "valid_fraction": 0.05,
@@ -410,20 +410,13 @@ def trained_dipole_polar_fixture(tmp_path_factory, fitting_configs):
 
 @pytest.fixture(scope="module", name="trained_energy_dipole_model")
 def trained_energy_dipole_fixture(tmp_path_factory, fitting_configs):
-    return _energy_dipole_fixture(tmp_path_factory, fitting_configs)
-    
-@pytest.fixture(scope="module", name="trained_energy_dipole_model_nan")
-def trained_energy_dipole_fixture_nan(tmp_path_factory, fitting_configs_nan):
-    return _energy_dipole_fixture(tmp_path_factory, fitting_configs_nan)
-
-def _energy_dipole_fixture(tmp_path_factory, fitting_configs):
     _mace_params = {
         "name": "MACE",
         "valid_fraction": 0.05,
         "energy_weight": 1.0,
         "forces_weight": 10.0,
         "stress_weight": 1.0,
-        "model": "EnergyDipoleMACE",
+        "model": "EnergyDipolesMACE",
         "num_channels": 32,
         "max_L": 1,
         "r_max": 3.5,
@@ -623,7 +616,7 @@ def test_calculator_from_model(tmp_path, fitting_configs, trained_committee):
     )
 
 
-def test_calculator_dipole(fitting_configs, trained_dipole_model):
+def test_calculator_dipole(tmp_path, fitting_configs, trained_dipole_model):
     at = fitting_configs[2].copy()
     at.calc = trained_dipole_model
 
@@ -633,7 +626,9 @@ def test_calculator_dipole(fitting_configs, trained_dipole_model):
     write_extxyz_test(tmp_path, at)
 
 
-def test_calculator_energy_dipole(fitting_configs, trained_energy_dipole_model):
+def test_calculator_energy_dipole(
+    tmp_path, fitting_configs, trained_energy_dipole_model
+):
     at = fitting_configs[2].copy()
     at.calc = trained_energy_dipole_model
 
@@ -858,3 +853,4 @@ def test_mace_omol_cueq(tmp_path, device="cpu"):
     assert np.allclose(energy, energy_cueq, atol=1e-6)
     assert np.allclose(forces, forces_cueq, atol=1e-6)
     assert np.allclose(energy, -2079.863496758961, atol=1e-9)
+    write_extxyz_test(tmp_path, mol)
