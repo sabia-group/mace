@@ -102,6 +102,7 @@ jobs:
         run: |
           pip install -U pip
           pip install ".[dev, cueq]"
+          pip install --force-reinstall --no-cache-dir lmdb==1.4.1
 
       - name: Log installed environment (with cueq)
         run: |
