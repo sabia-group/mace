@@ -16,6 +16,7 @@ class DefaultKeys(Enum):
     TOTAL_SPIN = "total_spin"
     ELEC_TEMP = "elec_temp"
     OXN = "oxn"
+    BEC = "BEC"
 
     @staticmethod
     def keydict() -> dict[str, str]:

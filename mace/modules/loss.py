@@ -183,6 +183,43 @@ def weighted_mean_squared_virials(
 
 
 # ------------------------------------------------------------------------------
+# BEC Loss Functions
+# ------------------------------------------------------------------------------
+def mean_squared_error_bec(
+    ref: Batch, pred: TensorDict, ddp: Optional[bool] = None
+) -> torch.Tensor:
+    if "bec" not in pred:
+        raise ValueError(
+            "Predictions do not contain 'bec' key required for BEC loss."
+            + "Please add --compute_bec True to your config.yml file."
+        )
+    # Repeat per-graph weights to per-atom level.
+    configs_weight = torch.repeat_interleave(
+        ref.weight, ref.ptr[1:] - ref.ptr[:-1]
+    ).unsqueeze(-1)
+    configs_bec_weight = torch.repeat_interleave(
+        ref.bec_weight, ref.ptr[1:] - ref.ptr[:-1]
+    ).unsqueeze(-1)
+    n_nodes = ref["bec"].shape[0]
+    assert pred["bec"].shape == (
+        3,
+        n_nodes,
+        3,
+    ), f"Expected 'bec' to have shape [3, {n_nodes}, 3], but got {pred['bec'].shape}"
+    raw_loss = sum(
+        general_loss_with_nan(
+            configs_weight,
+            configs_bec_weight,
+            ref["bec"][:, n, :],
+            pred["bec"][n, :, :],
+            lambda x, a, i: torch.square(x),
+        )
+        for n in range(3)
+    )
+    return reduce_loss(raw_loss, ddp)
+
+
+# ------------------------------------------------------------------------------
 # Forces Loss Functions
 # ------------------------------------------------------------------------------
 
@@ -349,6 +386,7 @@ class PESDielectricLoss(torch.nn.Module):
         stress_weight=0.0,
         virials_weight=0.0,
         dipole_weight=0.0,
+        bec_weight=0.0,
         polarizability_weight=0.0,
     ) -> None:
         super().__init__()
@@ -371,6 +409,10 @@ class PESDielectricLoss(torch.nn.Module):
         self.register_buffer(
             "dipole_weight",
             torch.tensor(dipole_weight, dtype=torch.get_default_dtype()),
+        )
+        self.register_buffer(
+            "bec_weight",
+            torch.tensor(bec_weight, dtype=torch.get_default_dtype()),
         )
         self.register_buffer(
             "polarizability_weight",
@@ -399,6 +441,8 @@ class PESDielectricLoss(torch.nn.Module):
             loss = loss + self.dipole_weight * weighted_mean_squared_error_dipole(
                 ref, pred, ddp
             )
+        if self.bec_weight > 0.0:
+            loss = loss + self.bec_weight * mean_squared_error_bec(ref, pred, ddp)
         if self.polarizability_weight > 0.0:
             loss = (
                 loss

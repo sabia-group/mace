@@ -35,6 +35,7 @@ from .utils import (
     compute_rel_rmse,
     compute_rmse,
     filter_nonzero_weight,
+    get_model_output
 )
 
 
@@ -422,18 +423,11 @@ def take_step(
 ) -> Tuple[float, Dict[str, Any]]:
     start_time = time.time()
     batch = batch.to(device)
-    batch_dict = batch.to_dict()
 
     def closure():
         optimizer.zero_grad(set_to_none=True)
-        output = model(
-            batch_dict,
-            training=True,
-            compute_force=output_args["forces"],
-            compute_virials=output_args["virials"],
-            compute_stress=output_args["stress"],
-        )
-        loss = loss_fn(pred=output, ref=batch)
+        output = get_model_output(model,batch,output_args)
+        loss:torch.Tensor = loss_fn(pred=output, ref=batch)
         loss.backward()
         if max_grad_norm is not None:
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=max_grad_norm)
@@ -582,13 +576,15 @@ def evaluate(
         for batch in data_loader:
             batch = batch.to(device)
             batch_dict = batch.to_dict()
-            output = model(
-                batch_dict,
-                training=False,
-                compute_force=output_args["forces"],
-                compute_virials=output_args["virials"],
-                compute_stress=output_args["stress"],
-            )
+            kwargs = {
+                "training": False,
+                "compute_force": output_args["forces"],
+                "compute_virials": output_args["virials"],
+                "compute_stress": output_args["stress"],
+            }
+            if "compute_bec" in output_args:
+                kwargs["compute_bec"] = output_args["compute_bec"]
+            output = model(batch_dict, **kwargs)
             avg_loss, aux = metrics(batch, output)
     avg_loss, aux = metrics.compute()
     aux["time"] = time.time() - start_time

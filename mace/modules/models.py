@@ -31,6 +31,7 @@ from .blocks import (
     ScaleShiftBlock,
 )
 from .utils import (
+    compute_dielectric_gradients_loop,
     compute_dielectric_gradients,
     compute_fixed_charge_dipole_polar,
     get_atomic_virials_stresses,
@@ -1326,6 +1327,7 @@ class EnergyDipoleMACE(torch.nn.Module):
         compute_virials: bool = False,
         compute_stress: bool = False,
         compute_displacement: bool = False,
+        compute_bec: bool = False,
         compute_edge_forces: bool = False,  # pylint: disable=W0613
         compute_atomic_stresses: bool = False,  # pylint: disable=W0613
     ) -> Dict[str, Optional[torch.Tensor]]:
@@ -1421,13 +1423,21 @@ class EnergyDipoleMACE(torch.nn.Module):
         ), f"'graph_features' has the wrong shape, expected {(num_graphs,n_components)} but got {graph_features.shape}"
         total_energy = graph_features[:, 0]
 
+        # Attention:
+        # if we want to compute the Born Charges we need to call 'torch.autograd.grad' on the dipoles w.r.t. the positions.
+        # However, since the forces are always computed, MACE always calls 'torch.autograd.grad' on the energy w.r.t. the positions.
+        # This happens in 'compute_forces' in 'mace/modules/utils.py', which is called inside 'get_outputs'.
+        # If 'training' == False, in that function the computational graph will be destroy and the Born Charges can not be computed afterwards.
+        # For this reason, we set 'training' == True if we need the Born Charges so that the computational graph is preserved and we can call 'torch.autograd.grad' in 'compute_dielectric_gradients'.
+        # If you don't believe me, please have a look at the keyword 'retain_graph' in 'mace/modules/utils.py' in the function 'compute_forces'.
+
         # energy, forces and stress
         forces, virials, stress, _, _ = get_outputs(
             energy=total_energy,
             positions=data["positions"],
             displacement=displacement,
             cell=data["cell"],
-            training=training,
+            training=training or compute_bec,
             compute_force=compute_force,
             compute_virials=compute_virials,
             compute_stress=compute_stress,
@@ -1441,7 +1451,7 @@ class EnergyDipoleMACE(torch.nn.Module):
             src=total_node_dipoles, index=data["batch"], dim=0, dim_size=num_graphs
         )
 
-        return {
+        out = {
             "energy": total_energy,  # [n_graphs,]
             "node_energy": node_energy,  # [n_nodes,]
             "forces": forces,  # [n_nodes,3]
@@ -1452,3 +1462,20 @@ class EnergyDipoleMACE(torch.nn.Module):
             "atomic_dipoles": node_dipoles,  # [n_nodes,3]
             "atomic-oxn-dipole": node_dipole_baseline,  # [n_nodes,3]
         }
+
+        if compute_bec:
+            bec = compute_dielectric_gradients_loop(
+                dielectric=total_dipole,  # [:,:2] try for debugging
+                inputs=[data["positions"]],
+            )[0]
+            assert bec.shape == (3, num_nodes, 3), f"'bec' has the wrong shape, expected {(3, num_nodes, 3)} but got {bec.shape}."
+            out["bec"] = bec
+            # bec.shape should be [3, n_nodes, 3]
+            # where the first dimension corresponds to the Cartesian components of the dipole
+            # the second dimension corresponds to the atoms,
+            # the third dimension corresponds to the Cartesian components of the positions.
+
+            # if you passed total_dipole[:,:2] into 'compute_dielectric_gradients_loop'
+            # you would get bec.shape == [2, n_nodes, 3]
+
+        return out

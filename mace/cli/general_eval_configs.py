@@ -9,6 +9,7 @@ import torch
 from mace import data
 from mace.cli.convert_e3nn_cueq import run as run_e3nn_to_cueq
 from mace.tools import DefaultKeys, torch_geometric, torch_tools, utils
+from mace.tools.utils import get_model_output
 
 ase_like_properties = {
     "energy": (),
@@ -83,23 +84,13 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default=DefaultKeys.OXN.value,
     )
+    parser.add_argument(
+        "--bec_key",
+        help="Key of oxidation numbers in training xyz",
+        type=str,
+        default=DefaultKeys.BEC.value,
+    )
     return parser.parse_args()
-
-
-def get_model_output(
-    model: torch.nn.Module,
-    batch: Dict[str, torch.Tensor],
-    compute_stress: bool,
-    compute_bec: bool,
-) -> Dict[str, torch.Tensor]:
-    forward_args = {
-        "compute_stress": compute_stress,
-    }
-    if compute_bec:
-        # Only add `compute_bec` if it is requested
-        # We check if the model is MACELES at the start of the run function
-        forward_args["compute_bec"] = compute_bec
-    return model(batch, **forward_args)
 
 
 def main() -> None:
@@ -166,7 +157,7 @@ def run(args: argparse.Namespace) -> None:
         ki = k
         batch = batch.to(device)
         output = get_model_output(
-            model, batch.to_dict(), args.compute_stress, args.compute_bec
+            model, batch, args.compute_stress, args.compute_bec
         )
 
         # remove empty fields

@@ -24,7 +24,7 @@ def configure_model(
 ):
     # Selecting outputs
     compute_virials = args.loss == "virials"
-    compute_stress = args.loss in ("stress", "huber", "universal", "stress+dipole")
+    compute_stress = args.loss in ("stress", "huber", "universal", "pes+dipole")
 
     if args.error_table == "StressDipoleRMSE":
         assert (
@@ -49,6 +49,8 @@ def configure_model(
         "dipoles": args.compute_dipole,
         "polarizabilities": args.compute_polarizability,
     }
+    if args.compute_bec is not None:
+        output_args["compute_bec"] = bool(args.compute_bec)
     logging.info(
         f"During training the following quantities will be reported: {', '.join([f'{report}' for report, value in output_args.items() if value])}"
     )
@@ -364,8 +366,8 @@ def _build_model(
     if args.model == "EnergyDipoleMACE":
         assert args.loss in [
             "energy_forces_dipole",
-            "stress+dipole",
-        ], "Use energy_forces_dipole or stress+dipole loss with EnergyDipoleMACE model"
+            "pes+dipole",
+        ], "Use energy_forces_dipole or pes+dipole loss with EnergyDipoleMACE model"
         assert args.error_table in [
             "EnergyDipoleRMSE",
             "StressDipoleRMSE",

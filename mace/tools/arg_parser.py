@@ -713,6 +713,18 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         default=DefaultKeys.OXN.value,
     )
     parser.add_argument(
+        "--bec_key",
+        help="Key of oxidation numbers in training xyz",
+        type=str,
+        default=DefaultKeys.BEC.value,
+    )
+    parser.add_argument(
+        "--compute_bec",
+        help="compute BEC",
+        # action="store_true",
+        default=None,
+    )
+    parser.add_argument(
         "--total_spin_key",
         help="Key of total spin in training xyz",
         type=str,
@@ -760,14 +772,13 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         help="type of loss",
         default="weighted",
         choices=[
-            "ef",
             "pes",
+            "pes+dipole",
             "weighted",
             "forces_only",
             "virials",
             "stress",
             "dipole",
-            "stress+dipole",
             "dipole_polar",
             "huber",
             "universal",
@@ -829,6 +840,17 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         type=float,
         default=1.0,
         dest="swa_dipole_weight",
+    )
+    parser.add_argument(
+        "--bec_weight", help="weight of BEC loss", type=float, default=1.0
+    )
+    parser.add_argument(
+        "--swa_bec_weight",
+        "--stage_two_bec_weight",
+        help="weight of BEC after starting Stage Two (previously called swa)",
+        type=float,
+        default=1.0,
+        dest="swa_bec_weight",
     )
     parser.add_argument(
         "--swa_polarizability_weight",

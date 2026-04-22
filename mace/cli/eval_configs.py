@@ -5,9 +5,7 @@
 ###########################################################################################
 
 import argparse
-from typing import Dict
 
-import ase.data
 import ase.io
 import numpy as np
 import torch
@@ -17,6 +15,7 @@ from mace import data
 from mace.cli.convert_e3nn_cueq import run as run_e3nn_to_cueq
 from mace.modules.utils import extract_invariant
 from mace.tools import torch_geometric, torch_tools, utils
+from mace.tools.utils import get_model_output
 
 
 def parse_args() -> argparse.Namespace:
@@ -111,22 +110,6 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def get_model_output(
-    model: torch.nn.Module,
-    batch: Dict[str, torch.Tensor],
-    compute_stress: bool,
-    compute_bec: bool,
-) -> Dict[str, torch.Tensor]:
-    forward_args = {
-        "compute_stress": compute_stress,
-    }
-    if compute_bec:
-        # Only add `compute_bec` if it is requested
-        # We check if the model is MACELES at the start of the run function
-        forward_args["compute_bec"] = compute_bec
-    return model(batch, **forward_args)
-
-
 def main() -> None:
     args = parse_args()
     run(args)
@@ -193,7 +176,7 @@ def run(args: argparse.Namespace) -> None:
     for batch in data_loader:
         batch = batch.to(device)
         output = get_model_output(
-            model, batch.to_dict(), args.compute_stress, args.compute_bec
+            model, batch, args.compute_stress, args.compute_bec
         )
         energies_list.append(torch_tools.to_numpy(output["energy"]))
         if args.compute_stress:

@@ -15,6 +15,7 @@ import numpy as np
 import torch
 
 from .torch_tools import to_numpy
+from mace.tools.torch_geometric import Batch
 
 
 def compute_mae(delta: np.ndarray) -> float:
@@ -307,3 +308,24 @@ def pbc_dipole(
     assert torch.allclose(frac_shift, torch.tensor(0.0)), "coding error"
 
     return final
+
+def get_model_output(
+    model: torch.nn.Module,
+    batch: Batch,
+    output_args: Dict[str,bool],
+) -> Dict[str, torch.Tensor]:
+    assert isinstance(batch, Batch), "'batch' should be of type Batch"
+    kwargs = {
+        "training": True,
+        "compute_force": output_args["forces"],
+        "compute_virials": output_args["virials"],
+        "compute_stress": output_args["stress"],
+    }
+    # not supported by all models
+    if "compute_bec" in output_args and output_args["compute_bec"] is not None:
+        kwargs["compute_bec"] = output_args["compute_bec"]
+            
+    return model(
+        batch.to_dict(),
+        **kwargs
+    )

@@ -558,7 +558,7 @@ def compute_dielectric_gradients(
         I_N = torch.eye(dielectric.shape[-1]).to(dielectric.device)
         gradient = torch.vmap(get_vjp, in_dims=0, out_dims=0)(I_N)[0]
     except RuntimeError:
-        gradient = compute_dielectric_gradients_loop(dielectric, positions).detach()
+        gradient = compute_dielectric_gradients_loop(dielectric, positions)[0].detach()
     if gradient is None:
         return torch.zeros((positions.shape[0], dielectric.shape[-1], 3))
     return gradient
@@ -583,23 +583,62 @@ def get_dipole_outputs(
     return atomic_dipoles + baseline, baseline
 
 
+# def compute_dielectric_gradients_loop(
+#     dielectric: torch.Tensor,
+#     positions: torch.Tensor,
+# ) -> torch.Tensor:
+#     gradients = []
+#     for i in range(dielectric.shape[-1]):
+#         grad_elem = dielectric[:, i]
+#         hess_row = torch.autograd.grad(
+#             grad_elem,
+#             positions,
+#             retain_graph=True,
+#             create_graph=True,
+#             allow_unused=False,
+#         )[0]
+#         gradients.append(hess_row)
+#     gradients = torch.stack(gradients)
+#     return gradients
+
+
 def compute_dielectric_gradients_loop(
-    dielectric: torch.Tensor,
-    positions: torch.Tensor,
-) -> torch.Tensor:
-    gradients = []
+    dielectric: torch.Tensor, inputs: List[torch.Tensor], clean: Optional[bool] = False
+) -> List[torch.Tensor]:
+    """
+    Compute gradients of the dielectric tensor with respect to a list of input tensors.
+
+    Args:
+        dielectric: Tensor whose gradients are computed.
+        inputs: Tensors to differentiate with respect to (arbitrary shapes allowed).
+        clean: If True, frees parts of the autograd graph when possible.
+
+    Returns:
+        List[torch.Tensor]: For each input tensor, the gradient d(dielectric)/d(input).
+    """
+    d_dielectric_dr = d_dielectric_dr = [
+        [None for _ in range(dielectric.shape[-1])] for _ in range(len(inputs))
+    ]
+    grad_outputs: List[torch.Tensor] = [
+        torch.ones((dielectric.shape[0], 1)).to(dielectric.device)
+    ]
     for i in range(dielectric.shape[-1]):
-        grad_elem = dielectric[:, i]
-        hess_row = torch.autograd.grad(
-            grad_elem,
-            positions,
-            retain_graph=True,
-            create_graph=True,
-            allow_unused=False,
-        )[0]
-        gradients.append(hess_row)
-    gradients = torch.stack(gradients)
-    return gradients
+        gradients = torch.autograd.grad(
+            outputs=[dielectric[:, i].unsqueeze(-1)],
+            inputs=inputs,
+            grad_outputs=grad_outputs,
+            retain_graph=(i < dielectric.shape[-1] - 1)
+            or not clean,  # small optimization
+            create_graph=False,  # small optimization
+            allow_unused=False,  # small optimization
+        )
+        assert len(gradients) == len(inputs), "coding error"
+        for j, (gradient, input) in enumerate(zip(gradients, inputs)):
+            assert gradient.shape == input.shape, "coding error"
+            d_dielectric_dr[j][i] = gradient.detach()
+        del gradients  # cleanup
+    del grad_outputs  # cleanup
+    return [torch.stack(out, dim=0) for out in d_dielectric_dr]
 
 
 class InteractionKwargs(NamedTuple):

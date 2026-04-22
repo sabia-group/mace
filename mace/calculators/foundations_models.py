@@ -42,6 +42,7 @@ def _urlretrieve_with_timeout(url, filename, timeout=_DOWNLOAD_TIMEOUT):
         print()  # newline after progress
     return filename, info
 
+
 module_dir = os.path.dirname(__file__)
 local_model_path = os.path.join(
     module_dir, "foundations_models/mace-mpa-0-medium.model"
@@ -123,9 +124,7 @@ def download_mace_mp_checkpoint(model: Optional[Union[str, Path]] = None) -> str
     if not os.path.isfile(cached_model_path):
         os.makedirs(cache_dir, exist_ok=True)
         print(f"Downloading MACE model from {checkpoint_url!r}")
-        _, http_msg = _urlretrieve_with_timeout(
-            checkpoint_url, cached_model_path
-        )
+        _, http_msg = _urlretrieve_with_timeout(checkpoint_url, cached_model_path)
         if "Content-Type: text/html" in str(http_msg):
             raise RuntimeError(
                 f"Model download failed, please check the URL {checkpoint_url}"
@@ -167,9 +166,7 @@ def download_mace_polar_checkpoint(model: Union[str, Path]) -> str:
     if not os.path.isfile(cached_model_path):
         os.makedirs(cache_dir, exist_ok=True)
         print(f"Downloading MACE-Polar model from {checkpoint_url!r}")
-        _, http_msg = _urlretrieve_with_timeout(
-            checkpoint_url, cached_model_path
-        )
+        _, http_msg = _urlretrieve_with_timeout(checkpoint_url, cached_model_path)
         if "Content-Type: text/html" in str(http_msg):
             raise RuntimeError(
                 f"Model download failed, please check the URL {checkpoint_url}"
