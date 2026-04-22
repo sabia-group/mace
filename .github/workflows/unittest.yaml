@@ -1,9 +1,9 @@
 name: unit tests
+
 on:
   pull_request:
   workflow_dispatch:
   push:
-    branches: [ main, develop ]
 
 concurrency:
   group: unit-tests-${{ github.ref }}

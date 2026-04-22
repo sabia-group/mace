@@ -2,8 +2,8 @@ name: Pre-Commit Checks
 
 on:
   pull_request:
+  workflow_dispatch:
   push:
-    branches: [main]
 
 jobs:
   pre-commit:
