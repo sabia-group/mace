@@ -156,7 +156,11 @@ def run(args: argparse.Namespace) -> None:
     for batch in data_loader:
         ki = k
         batch = batch.to(device)
-        output = get_model_output(model, batch, args.compute_stress, args.compute_bec)
+        output_args = {
+            "stress": args.compute_stress,
+            "bec": args.compute_bec,
+        }
+        output = get_model_output(model, batch, output_args)
 
         # remove empty fields
         to_delete = []

@@ -633,8 +633,8 @@ def compute_dielectric_gradients_loop(
             allow_unused=False,  # small optimization
         )
         assert len(gradients) == len(inputs), "coding error"
-        for j, (gradient, input) in enumerate(zip(gradients, inputs)):
-            assert gradient.shape == input.shape, "coding error"
+        for j, (gradient, _input) in enumerate(zip(gradients, inputs)):
+            assert gradient.shape == _input.shape, "coding error"
             d_dielectric_dr[j][i] = gradient.detach()
         del gradients  # cleanup
     del grad_outputs  # cleanup

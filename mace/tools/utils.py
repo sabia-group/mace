@@ -319,12 +319,12 @@ def get_model_output(
     assert isinstance(batch, Batch), "'batch' should be of type Batch"
     kwargs = {
         "training": True,
-        "compute_force": output_args["forces"],
-        "compute_virials": output_args["virials"],
-        "compute_stress": output_args["stress"],
+        "compute_force": output_args.get("forces", True),
+        "compute_virials": output_args.get("virials", True),
+        "compute_stress": output_args.get("stress", True),
     }
     # not supported by all models
-    if "compute_bec" in output_args and output_args["compute_bec"] is not None:
-        kwargs["compute_bec"] = output_args["compute_bec"]
+    if "bec" in output_args and output_args["bec"] is not None:
+        kwargs["compute_bec"] = output_args["bec"]
 
     return model(batch.to_dict(), **kwargs)

@@ -178,7 +178,7 @@ class AtomicData(torch_geometric.data.Data):
     @classmethod
     def from_config(
         cls,
-        config: Configuration,
+        config: "Configuration",
         z_table: AtomicNumberTable,
         cutoff: float,
         heads: Optional[list] = None,

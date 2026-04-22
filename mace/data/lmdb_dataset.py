@@ -3,7 +3,6 @@ import os
 import numpy as np
 from torch.utils.data import Dataset
 
-from mace.data.atomic_data import AtomicData
 from mace.data.utils import KeySpecification, config_from_atoms
 from mace.tools.default_keys import DefaultKeys
 from mace.tools.fairchem_dataset import AseDBDataset
@@ -54,6 +53,8 @@ class LMDBDataset(Dataset):
             config.head = self.kwargs.get("head", "Default")
 
         try:
+            from mace.data.atomic_data import AtomicData
+
             atomic_data = AtomicData.from_config(
                 config,
                 z_table=self.z_table,
