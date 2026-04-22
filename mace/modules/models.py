@@ -31,8 +31,8 @@ from .blocks import (
     ScaleShiftBlock,
 )
 from .utils import (
-    compute_dielectric_gradients_loop,
     compute_dielectric_gradients,
+    compute_dielectric_gradients_loop,
     compute_fixed_charge_dipole_polar,
     get_atomic_virials_stresses,
     get_dipole_outputs,
@@ -1468,7 +1468,11 @@ class EnergyDipoleMACE(torch.nn.Module):
                 dielectric=total_dipole,  # [:,:2] try for debugging
                 inputs=[data["positions"]],
             )[0]
-            assert bec.shape == (3, num_nodes, 3), f"'bec' has the wrong shape, expected {(3, num_nodes, 3)} but got {bec.shape}."
+            assert bec.shape == (
+                3,
+                num_nodes,
+                3,
+            ), f"'bec' has the wrong shape, expected {(3, num_nodes, 3)} but got {bec.shape}."
             out["bec"] = bec
             # bec.shape should be [3, n_nodes, 3]
             # where the first dimension corresponds to the Cartesian components of the dipole

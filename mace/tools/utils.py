@@ -14,8 +14,9 @@ from typing import Any, Dict, Iterable, Optional, Sequence, Union
 import numpy as np
 import torch
 
-from .torch_tools import to_numpy
 from mace.tools.torch_geometric import Batch
+
+from .torch_tools import to_numpy
 
 
 def compute_mae(delta: np.ndarray) -> float:
@@ -309,10 +310,11 @@ def pbc_dipole(
 
     return final
 
+
 def get_model_output(
     model: torch.nn.Module,
     batch: Batch,
-    output_args: Dict[str,bool],
+    output_args: Dict[str, bool],
 ) -> Dict[str, torch.Tensor]:
     assert isinstance(batch, Batch), "'batch' should be of type Batch"
     kwargs = {
@@ -324,8 +326,5 @@ def get_model_output(
     # not supported by all models
     if "compute_bec" in output_args and output_args["compute_bec"] is not None:
         kwargs["compute_bec"] = output_args["compute_bec"]
-            
-    return model(
-        batch.to_dict(),
-        **kwargs
-    )
+
+    return model(batch.to_dict(), **kwargs)

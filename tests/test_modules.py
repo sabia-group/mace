@@ -8,9 +8,9 @@ from mace.data import AtomicData, Configuration
 from mace.modules import (
     AtomicEnergiesBlock,
     BesselBasis,
+    PESDielectricLoss,
     PolynomialCutoff,
     SymmetricContraction,
-    PESDielectricLoss,
     WeightedHuberEnergyForcesStressLoss,
     compute_mean_rms_energy_forces,
     compute_statistics,

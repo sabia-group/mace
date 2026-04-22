@@ -35,7 +35,7 @@ from .utils import (
     compute_rel_rmse,
     compute_rmse,
     filter_nonzero_weight,
-    get_model_output
+    get_model_output,
 )
 
 
@@ -426,8 +426,8 @@ def take_step(
 
     def closure():
         optimizer.zero_grad(set_to_none=True)
-        output = get_model_output(model,batch,output_args)
-        loss:torch.Tensor = loss_fn(pred=output, ref=batch)
+        output = get_model_output(model, batch, output_args)
+        loss: torch.Tensor = loss_fn(pred=output, ref=batch)
         loss.backward()
         if max_grad_norm is not None:
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=max_grad_norm)

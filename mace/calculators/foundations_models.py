@@ -11,7 +11,6 @@ from mace.tools.utils import get_cache_dir
 
 from .mace import MACECalculator
 
-
 _DOWNLOAD_TIMEOUT = 120  # seconds – socket-level read timeout for model downloads
 
 
