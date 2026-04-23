@@ -1,16 +1,19 @@
 name: Unit Tests
+
 on:
   push:
-    branches: [ '**' ]
+    branches:
+      - '**'
   pull_request:
-    branches: [ '**' ]
+    branches:
+      - '**'
 
 jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [ '3.8', '3.9', '3.10', '3.11', '3.12' ]
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12']
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -23,10 +26,13 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -U pip
+          pip install --upgrade pip setuptools wheel
+          pip install cffi
           pip install .[dev]
           pip install pytest
 
       - name: Run tests
+        env:
+          PYTHONPATH: .
         run: |
           pytest -v tests
