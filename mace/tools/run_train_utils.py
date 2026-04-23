@@ -1,5 +1,4 @@
 import logging
-import os
 from pathlib import Path
 from typing import Any, List, Optional, Union
 
@@ -77,18 +76,6 @@ def load_dataset_for_path(
     filepath = Path(file_path)
     if filepath.is_dir():
 
-        if filepath.name.endswith("_lmdb") or any(
-            f.endswith(".lmdb") or f.endswith(".aselmdb") for f in os.listdir(filepath)
-        ):
-            logging.info(f"Loading LMDB dataset from {file_path}")
-            return data.LMDBDataset(
-                file_path,
-                r_max=r_max,
-                z_table=z_table,
-                heads=heads,
-                head=head_config.head_name,
-            )
-
         h5_files = list(filepath.glob("*.h5")) + list(filepath.glob("*.hdf5"))
         if h5_files:
             logging.info(f"Loading HDF5 dataset from directory {file_path}")
@@ -103,16 +90,6 @@ def load_dataset_for_path(
             except Exception as e:
                 logging.error(f"Error loading sharded HDF5 dataset: {e}")
                 raise
-
-        if "lmdb" in str(filepath).lower() or "aselmdb" in str(filepath).lower():
-            logging.info(f"Loading LMDB dataset based on path name: {file_path}")
-            return data.LMDBDataset(
-                file_path,
-                r_max=r_max,
-                z_table=z_table,
-                heads=heads,
-                head=head_config.head_name,
-            )
 
         logging.info(f"Attempting to load directory as HDF5 dataset: {file_path}")
         try:
@@ -138,24 +115,7 @@ def load_dataset_for_path(
             head=head_config.head_name,
         )
 
-    if suffix in (".lmdb", ".aselmdb", ".db"):
-        logging.info(f"Loading single LMDB file: {file_path}")
-        return data.LMDBDataset(
-            file_path,
-            r_max=r_max,
-            z_table=z_table,
-            heads=heads,
-            head=head_config.head_name,
-        )
-
-    logging.info(f"Attempting to load as LMDB: {file_path}")
-    return data.LMDBDataset(
-        file_path,
-        r_max=r_max,
-        z_table=z_table,
-        heads=heads,
-        head=head_config.head_name,
-    )
+    return None
 
 
 def combine_datasets(datasets, head_name):

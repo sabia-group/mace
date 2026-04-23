@@ -421,9 +421,7 @@ def run(args) -> None:
                 f"Total number of configurations in pretraining: train={len(head_config_pt.collections.train)}, valid={len(head_config_pt.collections.valid)}"
             )
         else:
-            logging.debug(
-                "Using LMDB/HDF5 datasets for pretraining or fine-tuning - skipping ratio check"
-            )
+            raise ValueError("LMDB/HDF5 datasets not supported")
 
     # Atomic number table
     # yapf: disable

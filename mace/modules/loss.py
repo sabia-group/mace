@@ -211,7 +211,7 @@ def mean_squared_error_bec(
             configs_weight,
             configs_bec_weight,
             ref["bec"][:, n, :],
-            pred["bec"][n, :, :],
+            pred["bec"][:, n, :],
             lambda x, a, i: torch.square(x),
         )
         for n in range(3)

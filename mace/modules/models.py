@@ -1464,6 +1464,15 @@ class EnergyDipoleMACE(torch.nn.Module):
         }
 
         if compute_bec:
+
+            # bec.shape should be [3, n_nodes, 3]
+            # where the first dimension corresponds to the Cartesian components of the dipole
+            # the second dimension corresponds to the atoms,
+            # the third dimension corresponds to the Cartesian components of the positions.
+
+            # if you passed total_dipole[:,:2] into 'compute_dielectric_gradients_loop'
+            # you would get bec.shape == [2, n_nodes, 3]
+
             bec = compute_dielectric_gradients_loop(
                 dielectric=total_dipole,  # [:,:2] try for debugging
                 inputs=[data["positions"]],
@@ -1473,13 +1482,13 @@ class EnergyDipoleMACE(torch.nn.Module):
                 num_nodes,
                 3,
             ), f"'bec' has the wrong shape, expected {(3, num_nodes, 3)} but got {bec.shape}."
-            out["bec"] = bec
-            # bec.shape should be [3, n_nodes, 3]
-            # where the first dimension corresponds to the Cartesian components of the dipole
-            # the second dimension corresponds to the atoms,
-            # the third dimension corresponds to the Cartesian components of the positions.
 
-            # if you passed total_dipole[:,:2] into 'compute_dielectric_gradients_loop'
-            # you would get bec.shape == [2, n_nodes, 3]
+            # We reshape 'bec' so that it will have a shape that is ASE-readable
+            # ASE expects the Born Effective Charges to be in a shape (n_atoms, 3, 3):
+            # - the first dimension corresponds to the atoms
+            # - the second dimension corresponds to the Cartesian components of the dipole,
+            # - the third dimension corresponds to the Cartesian components of the positions.
+            # In this way every atom has 3x3 matrix, with dipole components as rows and position components as columns.
+            out["bec"] = bec.moveaxis(0, 1)  # [3, n_nodes, 3] --> [n_nodes, 3, 3]
 
         return out
