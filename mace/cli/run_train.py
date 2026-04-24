@@ -409,8 +409,8 @@ def run(args) -> None:
                 f"Total number of configurations in pretraining: train={len(head_config_pt.collections.train)}, valid={len(head_config_pt.collections.valid)}"
             )
         else:
-            raise ValueError(
-                "LMDB/HDF5 datasets not supported for multiheads finetuning mode"
+            logging.debug(
+                "Using LMDB/HDF5 datasets for pretraining or fine-tuning - skipping ratio check"
             )
 
     # Atomic number table
