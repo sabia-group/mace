@@ -330,7 +330,7 @@ def test_lora_merge_preserves_equivariance(build_lora_model, random_configs) -> 
 
 def test_lora_evaluate_preserves_frozen_state(build_lora_model, random_configs) -> None:
     """Test that evaluate() preserves requires_grad states for LoRA models."""
-    from mace.modules.loss import WeightedEnergyForcesLoss
+    from mace.modules.loss import PESDielectricLoss
     from mace.tools import evaluate
 
     model, table = build_lora_model(rank=2, alpha=0.5, randomize=True)
@@ -357,7 +357,7 @@ def test_lora_evaluate_preserves_frozen_state(build_lora_model, random_configs) 
     )
 
     # Run evaluate
-    loss_fn = WeightedEnergyForcesLoss(energy_weight=1.0, forces_weight=1.0)
+    loss_fn = PESDielectricLoss(energy_weight=1.0, forces_weight=1.0)
     output_args = {"forces": True, "virials": False, "stress": False}
     evaluate(model, loss_fn, loader, output_args, device=torch.device("cpu"))
 
