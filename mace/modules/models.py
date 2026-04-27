@@ -1486,9 +1486,9 @@ class EnergyDipoleMACE(torch.nn.Module):
             # We reshape 'bec' so that it will have a shape that is ASE-readable
             # ASE expects the Born Effective Charges to be in a shape (n_atoms, 3, 3):
             # - the first dimension corresponds to the atoms
-            # - the second dimension corresponds to the Cartesian components of the dipole,
-            # - the third dimension corresponds to the Cartesian components of the positions.
+            # - the second dimension corresponds to the Cartesian components of the positions,
+            # - the third dimension corresponds to the Cartesian components of the dipole.
             # In this way every atom has 3x3 matrix, with dipole components as rows and position components as columns.
-            out["bec"] = bec.moveaxis(0, 1)  # [3, n_nodes, 3] --> [n_nodes, 3, 3]
+            out["bec"] = bec.moveaxis(0, 2)  # [3', n_nodes, 3] --> [n_nodes, 3, 3']
 
         return out
