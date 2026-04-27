@@ -132,8 +132,6 @@ def create_h5_dataset(xyz_file, output_dir, e0s_file=None, r_max=5.0, seed=42):
     return output_dir
 
 
-
-
 @pytest.mark.slow
 def test_multiple_xyz_per_head():
     """Test training with multiple XYZ files per head for train, valid and test sets"""
