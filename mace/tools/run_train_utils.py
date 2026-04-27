@@ -115,7 +115,7 @@ def load_dataset_for_path(
             head=head_config.head_name,
         )
 
-    return None
+    raise ValueError(f"Unsupported file format for path: {file_path}")
 
 
 def combine_datasets(datasets, head_name):
