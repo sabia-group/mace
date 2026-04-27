@@ -202,16 +202,16 @@ def mean_squared_error_bec(
     ).unsqueeze(-1)
     n_nodes = ref["bec"].shape[0]
     assert pred["bec"].shape == (
-        3,
         n_nodes,
         3,
-    ), f"Expected 'bec' to have shape [3, {n_nodes}, 3], but got {pred['bec'].shape}"
+        3,
+    ), f"Expected 'bec' to have shape [{n_nodes}, 3, 3], but got {pred['bec'].shape}"
     raw_loss = sum(
         general_loss_with_nan(
             configs_weight,
             configs_bec_weight,
-            ref["bec"][:, n, :],
-            pred["bec"][:, n, :],
+            ref["bec"][:, :, n],
+            pred["bec"][:, :, n],
             lambda x, a, i: torch.square(x),
         )
         for n in range(3)
