@@ -558,7 +558,9 @@ def compute_dielectric_gradients(
         I_N = torch.eye(dielectric.shape[-1]).to(dielectric.device)
         gradient = torch.vmap(get_vjp, in_dims=0, out_dims=0)(I_N)[0]
     except RuntimeError:
-        gradient = compute_dielectric_gradients_loop(dielectric, positions)[0].detach()
+        gradient = compute_dielectric_gradients_loop(
+            dielectric, positions, clean=False
+        )[0].detach()
     if gradient is None:
         return torch.zeros((positions.shape[0], dielectric.shape[-1], 3))
     return gradient
