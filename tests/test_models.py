@@ -182,7 +182,7 @@ def test_dipole_mace():
     model_compiled = jit.compile(model)
     batch = next(iter(data_loader))
     output_compiled = model_compiled(
-        batch, #.to_dict(),
+        batch.to_dict(),
         training=True,
     )
 
@@ -313,7 +313,7 @@ def test_energy_dipole_mace():
     model_compiled = jit.compile(model)
     batch = next(iter(data_loader))
     output_compiled = model_compiled(
-        batch, #.to_dict(),
+        batch.to_dict(),
         training=True,
     )
 
