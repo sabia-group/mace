@@ -193,7 +193,7 @@ def test_multi_reference():
         heads=["MP2", "DFT"],
         use_reduced_cg=False,
     )
-    model = modules.ScaleShiftMACE(**model_config)
+    model = modules.ScaleShiftMACE(**model_config).double()
     calc_foundation = mace_mp(model="medium", device="cpu", default_dtype="float64")
     model_loaded = load_foundations_elements(
         model,
