@@ -1476,7 +1476,7 @@ class EnergyDipoleMACE(torch.nn.Module):
             bec = compute_dielectric_gradients_loop(
                 dielectric=total_dipole,  # [:,:2] try for debugging
                 inputs=[data["positions"]],
-                clean=True,
+                clean=not training,
             )[0]
             assert bec.shape == (
                 3,

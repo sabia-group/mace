@@ -315,10 +315,11 @@ def get_model_output(
     model: torch.nn.Module,
     batch: Batch,
     output_args: Dict[str, bool],
+    training: bool = True,
 ) -> Dict[str, torch.Tensor]:
     assert isinstance(batch, Batch), "'batch' should be of type Batch"
     kwargs = {
-        "training": True,
+        "training": training,
         "compute_force": output_args.get("forces", True),
         "compute_virials": output_args.get("virials", True),
         "compute_stress": output_args.get("stress", True),

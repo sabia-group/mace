@@ -50,7 +50,7 @@ def configure_model(
         "polarizabilities": args.compute_polarizability,
     }
     if args.compute_bec is not None:
-        output_args["compute_bec"] = bool(args.compute_bec)
+        output_args["bec"] = bool(args.compute_bec)
     logging.info(
         f"During training the following quantities will be reported: {', '.join([f'{report}' for report, value in output_args.items() if value])}"
     )
