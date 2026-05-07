@@ -106,6 +106,7 @@ def create_error_table(
             "rel F RMSE %",
             "RMSE MU / me*ang / atom",
             "rel MU RMSE %",
+            "RMSE ALPHA e A^2 / V / atom",
         ]
     elif table_type == "StressDipoleRMSE":
         table.field_names = [
@@ -267,6 +268,7 @@ def create_error_table(
                     f"{metrics['rel_rmse_f']:8.3f}",
                     f"{metrics['rmse_mu_per_atom'] * 1000:8.3f}",
                     f"{metrics['rel_rmse_mu']:8.3f}",
+                    f"{metrics['rmse_polarizability_per_atom'] * 1000:.3f}",
                 ]
             )
         elif table_type == "StressDipoleRMSE":

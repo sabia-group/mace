@@ -97,11 +97,13 @@ error_type = {
             ("rmse_e_per_atom", "RMSE E/atom [meV]"),
             ("rmse_f", "RMSE F [meV / A]"),
             ("rmse_mu_per_atom", "RMSE MU/atom [me*ang]"),
+            ("rmse_polarizability_per_atom", "Relative ALPHA RMSE [%]"),  # check that
         ],
         [
             ("energy", "Energy per atom [eV]"),
             ("force", "Force [eV / A]"),
             ("dipole", "Dipole per atom [e*ang]"),
+            ("polarizability", "Polarizability per atom [e AA^2/V]"),
         ],
     ),
     "StressDipoleRMSE": (
@@ -392,6 +394,15 @@ def plot_inference_from_results(
                     label=name,
                 )
 
+            elif key == "polarizability" and "polarizability" in result:
+                scatter = ax.scatter(
+                    result["polarizability"]["reference_per_atom"],
+                    result["polarizability"]["predicted_per_atom"],
+                    marker=marker,
+                    color=fixed_color_train_valid,
+                    label=name,
+                )
+
             # Add each train/valid dataset's name to the legend if scatter was assigned
             if scatter is not None:
                 legend_labels[name] = scatter
@@ -444,6 +455,15 @@ def plot_inference_from_results(
                 scatter = ax.scatter(
                     result["dipole"]["reference_per_atom"],
                     result["dipole"]["predicted_per_atom"],
+                    marker="o",
+                    color=fixed_color_test,
+                    label="Test",
+                )
+
+            elif key == "polarizability" and "polarizability" in result:
+                scatter = ax.scatter(
+                    result["polarizability"]["reference_per_atom"],
+                    result["polarizability"]["predicted_per_atom"],
                     marker="o",
                     color=fixed_color_test,
                     label="Test",
@@ -546,6 +566,8 @@ class InferenceMetric(Metric):
         self.add_state("pred_virials", default=[], dist_reduce_fx="cat")
         self.add_state("ref_dipole", default=[], dist_reduce_fx="cat")
         self.add_state("pred_dipole", default=[], dist_reduce_fx="cat")
+        self.add_state("ref_polarizability", default=[], dist_reduce_fx="cat")
+        self.add_state("pred_polarizability", default=[], dist_reduce_fx="cat")
 
         # Per-atom normalized values
         self.add_state("ref_energies_per_atom", default=[], dist_reduce_fx="cat")
@@ -573,6 +595,9 @@ class InferenceMetric(Metric):
         self.add_state("n_stress", default=torch.tensor(0.0), dist_reduce_fx="sum")
         self.add_state("n_virials", default=torch.tensor(0.0), dist_reduce_fx="sum")
         self.add_state("n_dipole", default=torch.tensor(0.0), dist_reduce_fx="sum")
+        self.add_state(
+            "n_polarizability", default=torch.tensor(0.0), dist_reduce_fx="sum"
+        )
 
     def update(self, batch, output):  # pylint: disable=arguments-differ
         """Update metric states with new batch data."""
@@ -689,6 +714,28 @@ class InferenceMetric(Metric):
                 batch.weight,
                 batch.stress_weight,
             )
+
+        # # Polarizability
+        # if output.get("polarizability") is not None and batch.polarizability is not None:
+        #     self.ref_polarizability.append(batch.polarizability)
+        #     self.pred_polarizability.append(output["polarizability"])
+
+        #     self.n_polarizability += filter_nonzero_weight(
+        #         batch,
+        #         self.ref_polarizability,
+        #         batch.weight,
+        #         batch.polarizability_weight,
+        #         spread_atoms=False,
+        #         spread_quantity_vector=True
+        #     )
+        #     filter_nonzero_weight(
+        #         batch,
+        #         self.pred_polarizability,
+        #         batch.weight,
+        #         batch.polarizability_weight,
+        #         spread_atoms=False,
+        #         spread_quantity_vector=True
+        #     )
 
         # Virials
         if output.get("virials") is not None and batch.virials is not None:
@@ -831,6 +878,16 @@ class InferenceMetric(Metric):
         if self.n_stress:
             ref_s, pred_s = self._process_data(self.ref_stress, self.pred_stress)
             results["stress"] = {
+                "reference": ref_s,
+                "predicted": pred_s,
+            }
+
+        # Process polarizability
+        if self.n_stress:
+            ref_s, pred_s = self._process_data(
+                self.ref_polarizability, self.pred_polarizability
+            )
+            results["polarizability"] = {
                 "reference": ref_s,
                 "predicted": pred_s,
             }

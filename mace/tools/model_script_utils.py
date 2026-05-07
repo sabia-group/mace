@@ -24,7 +24,13 @@ def configure_model(
 ):
     # Selecting outputs
     compute_virials = args.loss == "virials"
-    compute_stress = args.loss in ("stress", "huber", "universal", "pes+dipole")
+    compute_stress = args.loss in (
+        "stress",
+        "huber",
+        "universal",
+        "pes+dipole",
+        "general",
+    )
 
     if args.error_table == "StressDipoleRMSE":
         assert (
@@ -367,7 +373,8 @@ def _build_model(
         assert args.loss in [
             "energy_forces_dipole",
             "pes+dipole",
-        ], "Use energy_forces_dipole or pes+dipole loss with EnergyDipoleMACE model"
+            "general",
+        ], "Use 'energy_forces_dipole', 'pes+dipole', or 'general' loss with EnergyDipoleMACE model"
         assert args.error_table in [
             "EnergyDipoleRMSE",
             "StressDipoleRMSE",
