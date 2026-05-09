@@ -112,7 +112,7 @@ def create_error_table(
             "config_type",
             "RMSE E / meV / atom",
             "RMSE F / meV / A",
-            "relative F RMSE %",
+            "rel F RMSE %",
             "RMSE Stress (Virials) / meV / A (A^3)",
             "RMSE MU / me*ang / atom",
             "rel MU RMSE %",

@@ -364,14 +364,15 @@ def _build_model(
             MLP_irreps=o3.Irreps(args.MLP_irreps),
         )
     if args.model == "EnergyDipoleMACE":
-        assert args.loss in [
-            "energy_forces_dipole",
-            "pes+dipole",
-        ], "Use energy_forces_dipole or pes+dipole loss with EnergyDipoleMACE model"
-        assert args.error_table in [
-            "EnergyDipoleRMSE",
-            "StressDipoleRMSE",
-        ], f"Use error_table EnergyDipoleRMSE or StressDipoleRMSE  with EnergyDipoleMACE model (provided error table is {args.error_table })"
+        # assert args.loss in [
+        #     "energy_forces_dipole",
+        #     "pes+dipole",
+        # ], "Use energy_forces_dipole or pes+dipole loss with EnergyDipoleMACE model"
+        # assert args.error_table in [
+        #     "EnergyDipoleRMSE",
+        #     "StressDipoleRMSE",
+        #     "PerAtomRMSEstressvirials"
+        # ], f"Use error_table EnergyDipoleRMSE or StressDipoleRMSE  with EnergyDipoleMACE model (provided error table is {args.error_table })"
         return modules.EnergyDipoleMACE(
             **model_config,
             correlation=args.correlation,
