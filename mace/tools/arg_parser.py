@@ -1130,6 +1130,12 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         action="store_true",
         default=False,
     )
+    parser.add_argument(
+        "--transpose_bec",
+        help="Transpose the Born Effective charges in the datasets.",
+        action="store_true",
+        default=False,
+    )
     return parser
 
 
