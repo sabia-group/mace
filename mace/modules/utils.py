@@ -604,7 +604,6 @@ def get_dipole_outputs(
 #     return gradients
 
 
-@torch.jit.ignore
 def compute_dielectric_gradients_loop(
     dielectric: torch.Tensor, inputs: List[torch.Tensor], clean: Optional[bool] = False
 ) -> List[torch.Tensor]:
