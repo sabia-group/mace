@@ -605,7 +605,7 @@ def get_dipole_outputs(
 
 
 def compute_dielectric_gradients_loop(
-    dielectric: torch.Tensor, inputs: List[torch.Tensor], clean: Optional[bool] = False
+    dielectric: torch.Tensor, inputs: List[torch.Tensor], clean: bool
 ) -> List[torch.Tensor]:
     """
     Compute gradients of the dielectric tensor with respect to a list of input tensors.
@@ -618,11 +618,12 @@ def compute_dielectric_gradients_loop(
     Returns:
         List[torch.Tensor]: For each input tensor, the gradient d(dielectric)/d(input).
     """
+    clean = bool(clean)
     d_dielectric_dr = d_dielectric_dr = [
         [None for _ in range(dielectric.shape[-1])] for _ in range(len(inputs))
     ]
     grad_outputs: List[torch.Tensor] = [
-        torch.ones((dielectric.shape[0], 1)).to(dielectric.device)
+        torch.ones((dielectric.shape[0], 1), device=dielectric.device)
     ]
     for i in range(dielectric.shape[-1]):
         gradients = torch.autograd.grad(
@@ -630,7 +631,7 @@ def compute_dielectric_gradients_loop(
             inputs=inputs,
             grad_outputs=grad_outputs,
             retain_graph=(i < dielectric.shape[-1] - 1)
-            or not clean,  # small optimization
+            or (not clean),  # small optimization
             create_graph=False,  # small optimization
             allow_unused=False,  # small optimization
         )
