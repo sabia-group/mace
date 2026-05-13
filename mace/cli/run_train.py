@@ -147,7 +147,6 @@ def run(args) -> None:
             f"Environment variable 'TRANSPOSE_BEC' already defined and equal to {old_value}, overwriting it to {value}."
         )
     os.environ["TRANSPOSE_BEC"] = value
-    value = os.environ["TRANSPOSE_BEC"]
     logging.info(f"Using environment variable 'TRANSPOSE_BEC' equal to {value}")
 
     tools.set_default_dtype(args.default_dtype)
