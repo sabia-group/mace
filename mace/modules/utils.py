@@ -608,39 +608,51 @@ def compute_dielectric_gradients_loop(
     dielectric: torch.Tensor, inputs: List[torch.Tensor], clean: bool
 ) -> List[torch.Tensor]:
     """
-    Compute gradients of the dielectric tensor with respect to a list of input tensors.
+    Compute d(dielectric[:, i]) / d(inputs[j]) for all i and inputs.
 
     Args:
-        dielectric: Tensor whose gradients are computed.
-        inputs: Tensors to differentiate with respect to (arbitrary shapes allowed).
-        clean: If True, frees parts of the autograd graph when possible.
+        dielectric: [B, D] tensor output.
+        inputs: list of input tensors used to compute dielectric.
+        clean: if True, frees autograd graph earlier.
 
     Returns:
-        List[torch.Tensor]: For each input tensor, the gradient d(dielectric)/d(input).
+        List of gradients, one per input, each with shape (..., D).
     """
+
     clean = bool(clean)
-    d_dielectric_dr = d_dielectric_dr = [
-        [None for _ in range(dielectric.shape[-1])] for _ in range(len(inputs))
-    ]
-    grad_outputs: List[torch.Tensor] = [
-        torch.ones((dielectric.shape[0], 1), device=dielectric.device)
-    ]
-    for i in range(dielectric.shape[-1]):
+
+    n_out = dielectric.shape[-1]
+    n_in = len(inputs)
+
+    # Storage: [input_index][output_index]
+    # Later stacked into [input, ..., D]
+    d_dielectric_dr = [[None for _ in range(n_out)] for _ in range(n_in)]
+
+    last = n_out - 1
+
+    for i in range(n_out):
+
+        # Select single output component: [B, 1]
+        outputs = dielectric[:, i : i + 1]
+
+        # Gradient "seed" for VJP (one per output scalar)
+        grad_outputs = (torch.ones_like(outputs),)
+
+        # Compute vector-Jacobian product wrt all inputs
         gradients = torch.autograd.grad(
-            outputs=[dielectric[:, i].unsqueeze(-1)],
+            outputs=outputs,
             inputs=inputs,
             grad_outputs=grad_outputs,
-            retain_graph=(i < dielectric.shape[-1] - 1)
-            or (not clean),  # small optimization
-            create_graph=False,  # small optimization
-            allow_unused=False,  # small optimization
+            retain_graph=(i != last) or (not clean),
+            create_graph=False,
+            allow_unused=False,
         )
-        assert len(gradients) == len(inputs), "coding error"
-        for j, (gradient, _input) in enumerate(zip(gradients, inputs)):
-            assert gradient.shape == _input.shape, "coding error"
-            d_dielectric_dr[j][i] = gradient.detach()
-        del gradients  # cleanup
-    del grad_outputs  # cleanup
+
+        # Store per-input gradient slice for this output component
+        for j, g in enumerate(gradients):
+            d_dielectric_dr[j][i] = g.detach()
+
+    # Stack output dimension last: [input_shape..., D]
     return [torch.stack(out, dim=0) for out in d_dielectric_dr]
 
 
