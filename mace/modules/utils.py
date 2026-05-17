@@ -650,7 +650,9 @@ def compute_dielectric_gradients_loop(
 
         # Store per-input gradient slice for this output component
         for j, g in enumerate(gradients):
-            d_dielectric_dr[j][i] = g.detach()
+            d_dielectric_dr[j][i] = (
+                g.detach() if g is not None else torch.zeros_like(inputs[j])
+            )
 
     # Stack output dimension last: [input_shape..., D]
     return [torch.stack(out, dim=0) for out in d_dielectric_dr]
