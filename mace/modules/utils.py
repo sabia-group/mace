@@ -633,20 +633,20 @@ def compute_dielectric_gradients_loop(
     for i in range(n_out):
 
         # Select single output component: [B, 1]
-        outputs = dielectric[:, i : i + 1]
+        outputs = dielectric[:, i].unsqueeze(-1)
 
         # Gradient "seed" for VJP (one per output scalar)
         grad_outputs = (torch.ones_like(outputs),)
 
         # Compute vector-Jacobian product wrt all inputs
         gradients = torch.autograd.grad(
-            outputs=outputs,
+            outputs=[outputs],
             inputs=inputs,
             grad_outputs=grad_outputs,
             retain_graph=(i != last) or (not clean),
             create_graph=False,
             allow_unused=False,
-        )
+        )  # [0]
 
         # Store per-input gradient slice for this output component
         for j, g in enumerate(gradients):
