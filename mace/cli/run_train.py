@@ -131,18 +131,17 @@ def run(args) -> None:
     # environment variables
     value = str(args.use_pbc_dipole).lower()
     if "USE_PBC_DIPOLE" in os.environ:  # set in the submission script
-        old_value = os.environ["USE_PBC_DIPOLE"].lower()
+        old_value = str(os.environ["USE_PBC_DIPOLE"]).lower()
         logging.warning(
             f"Environment variable 'USE_PBC_DIPOLE' already defined and equal to {old_value}, overwriting it to {value}."
         )
     os.environ["USE_PBC_DIPOLE"] = value
-    value = os.environ["USE_PBC_DIPOLE"]
     logging.info(f"Using environment variable 'USE_PBC_DIPOLE' equal to {value}")
 
     # environment variables
     value = str(args.transpose_bec).lower()
     if "TRANSPOSE_BEC" in os.environ:  # set in the submission script
-        old_value = os.environ["TRANSPOSE_BEC"].lower()
+        old_value = str(os.environ["TRANSPOSE_BEC"]).lower()
         logging.warning(
             f"Environment variable 'TRANSPOSE_BEC' already defined and equal to {old_value}, overwriting it to {value}."
         )
