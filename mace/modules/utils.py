@@ -662,7 +662,7 @@ def compute_dielectric_gradients_loop(
             )
 
     # Stack output dimension last: [input_shape..., D]
-    return [torch.stack(out, dim=0) for out in d_dielectric_dr]
+    return d_dielectric_dr
 
 
 class InteractionKwargs(NamedTuple):
