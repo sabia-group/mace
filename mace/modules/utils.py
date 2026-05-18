@@ -626,7 +626,14 @@ def compute_dielectric_gradients_loop(
 
     # Storage: [input_index][output_index]
     # Later stacked into [input, ..., D]
-    d_dielectric_dr = [[None for _ in range(n_out)] for _ in range(n_in)]
+    d_dielectric_dr = [
+        torch.zeros(
+            (n_out,) + inputs[j].shape,
+            dtype=inputs[j].dtype,
+            device=inputs[j].device,
+        )
+        for j in range(n_in)
+    ]
 
     last = n_out - 1
 
