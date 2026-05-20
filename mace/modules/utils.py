@@ -559,7 +559,7 @@ def compute_dielectric_gradients(
         gradient = torch.vmap(get_vjp, in_dims=0, out_dims=0)(I_N)[0]
     except RuntimeError:
         gradient = compute_dielectric_gradients_loop(
-            dielectric, positions, clean=False
+            dielectric, positions, clean=False, training=True
         )[0].detach()
     if gradient is None:
         return torch.zeros((positions.shape[0], dielectric.shape[-1], 3))
@@ -605,7 +605,7 @@ def get_dipole_outputs(
 
 
 def compute_dielectric_gradients_loop(
-    dielectric: torch.Tensor, inputs: List[torch.Tensor], clean: bool
+    dielectric: torch.Tensor, inputs: List[torch.Tensor], clean: bool, training: bool
 ) -> List[torch.Tensor]:
     """
     Compute d(dielectric[:, i]) / d(inputs[j]) for all i and inputs.
@@ -646,20 +646,18 @@ def compute_dielectric_gradients_loop(
         grad_outputs = (torch.ones_like(outputs),)
 
         # Compute vector-Jacobian product wrt all inputs
+        retain_graph = (i != last) or (not clean)
         gradients = torch.autograd.grad(
             outputs=[outputs],
             inputs=inputs,
             grad_outputs=grad_outputs,
-            retain_graph=(i != last) or (not clean),
-            create_graph=False,
+            retain_graph=retain_graph,
+            create_graph=training,  # if True the gradients will be autodiffertiable
             allow_unused=False,
-        )  # [0]
-
+        )
         # Store per-input gradient slice for this output component
         for j, g in enumerate(gradients):
-            d_dielectric_dr[j][i] = (
-                g.detach() if g is not None else torch.zeros_like(inputs[j])
-            )
+            d_dielectric_dr[j][i] = g if g is not None else torch.zeros_like(inputs[j])
 
     # Stack output dimension last: [input_shape..., D]
     return d_dielectric_dr
