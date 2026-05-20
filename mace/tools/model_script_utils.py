@@ -26,7 +26,7 @@ def configure_model(
     compute_virials = args.loss == "virials"
     compute_stress = args.loss in ("stress", "huber", "universal", "pes+dipole")
 
-    # if args.error_table == "StressDipoleRMSE":
+    # if args.error_table == "pes+mu":
     #     assert (
     #         not compute_virials
     #     ), f"virials are not supported with error table {args.error_table}"
@@ -370,9 +370,9 @@ def _build_model(
         # ], "Use energy_forces_dipole or pes+dipole loss with EnergyDipoleMACE model"
         # assert args.error_table in [
         #     "EnergyDipoleRMSE",
-        #     "StressDipoleRMSE",
+        #     "pes+mu",
         #     "PerAtomRMSEstressvirials"
-        # ], f"Use error_table EnergyDipoleRMSE or StressDipoleRMSE  with EnergyDipoleMACE model (provided error table is {args.error_table })"
+        # ], f"Use error_table EnergyDipoleRMSE or pes+mu  with EnergyDipoleMACE model (provided error table is {args.error_table })"
         return modules.EnergyDipoleMACE(
             **model_config,
             correlation=args.correlation,
