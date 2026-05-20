@@ -547,6 +547,7 @@ def model_inference(
         scatter_metric = InferenceMetric().to(device)
 
         for batch in data_loader:
+            batch = batch.to(device)
             output = get_model_output(model, batch, output_args)
             results = scatter_metric(batch, output)
 
