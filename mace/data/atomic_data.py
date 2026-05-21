@@ -4,6 +4,7 @@
 # This program is distributed under the MIT License (see MIT.md)
 ###########################################################################################
 
+import os
 from copy import deepcopy
 from typing import Optional, Sequence
 
@@ -360,6 +361,13 @@ class AtomicData(torch_geometric.data.Data):
             if config.properties.get("bec") is not None
             else torch.zeros(num_atoms, 3, 3, dtype=torch.get_default_dtype())
         )
+        if os.environ.get("TRANSPOSE_BEC", "false").lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        ):
+            bec = torch.moveaxis(bec, 1, 2)
         elec_temp = (
             torch.tensor(
                 config.properties.get("elec_temp"),

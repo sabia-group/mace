@@ -108,16 +108,18 @@ def create_error_table(
             "rel MU RMSE %",
             "RMSE ALPHA e A^2 / V / atom",
         ]
-    elif table_type == "StressDipoleRMSE":
+    elif table_type in ["pes+mu", "pes+bec", "pes+mu+bec"]:
         table.field_names = [
             "config_type",
             "RMSE E / meV / atom",
             "RMSE F / meV / A",
-            "relative F RMSE %",
+            "rel F RMSE %",
             "RMSE Stress (Virials) / meV / A (A^3)",
-            "RMSE MU / me*ang / atom",
-            "rel MU RMSE %",
         ]
+        if "mu" in table_type:
+            table.field_names += ["RMSE MU / me*ang / atom", "rel MU RMSE %"]
+        if "bec" in table_type:
+            table.field_names += ["RMSE Z* / me"]
 
     for name in sorted(all_data_loaders, key=custom_key):
         if any(skip_head in name for skip_head in skip_heads):
@@ -271,20 +273,22 @@ def create_error_table(
                     f"{metrics['rmse_polarizability_per_atom'] * 1000:.3f}",
                 ]
             )
-        elif table_type == "StressDipoleRMSE":
-            # assert (
-            #     metrics["rmse_virials"] is None
-            # ), "rmse_virials not supported with StressDipoleRMSE"
-            table.add_row(
-                [
-                    name,
-                    f"{metrics['rmse_e_per_atom'] * 1000:8.3f}",
-                    f"{metrics['rmse_f'] * 1000:8.3f}",
-                    f"{metrics['rel_rmse_f']:8.3f}",
-                    f"{metrics['rmse_stress'] * 1000:8.3f}",
+        elif table_type in ["pes+mu", "pes+bec", "pes+mu+bec"]:
+            rows = [
+                name,
+                f"{metrics['rmse_e_per_atom'] * 1000:8.3f}",
+                f"{metrics['rmse_f'] * 1000:8.3f}",
+                f"{metrics['rel_rmse_f']:8.3f}",
+                f"{metrics['rmse_stress'] * 1000:8.3f}",
+            ]
+            if "mu" in table_type:
+                rows += [
                     f"{metrics['rmse_mu_per_atom'] * 1000:8.3f}",
                     f"{metrics['rel_rmse_mu']:8.3f}",
                 ]
-            )
+
+            if "bec" in table_type:
+                rows += [f"{metrics['rmse_bec'] * 1000:8.3f}"]
+            table.add_row(rows)
 
     return table
