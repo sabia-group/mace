@@ -116,9 +116,9 @@ def create_error_table(
             "RMSE Stress (Virials) / meV / A (A^3)",
         ]
         if "mu" in table_type:
-            table.field_names.append(["RMSE MU / me*ang / atom", "rel MU RMSE %"])
+            table.field_names += ["RMSE MU / me*ang / atom", "rel MU RMSE %"]
         if "bec" in table_type:
-            table.field_names.append(["RMSE Z* / e"])
+            table.field_names += ["RMSE Z* / me"]
 
     for name in sorted(all_data_loaders, key=custom_key):
         if any(skip_head in name for skip_head in skip_heads):
