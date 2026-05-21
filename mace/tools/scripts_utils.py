@@ -661,20 +661,27 @@ def get_loss_fn(
     dipole_only: bool,
     compute_dipole: bool,
 ) -> torch.nn.Module:
-    if args.loss == "weighted":
-        loss_fn = modules.WeightedEnergyForcesLoss(
+    if args.loss == "pes":
+        loss_fn = modules.PESDielectricLoss(
+            energy_weight=args.energy_weight,
+            forces_weight=args.forces_weight,
+            stress_weight=args.stress_weight,
+            virials_weight=args.virials_weight,
+        )
+    elif args.loss == "weighted":
+        loss_fn = modules.PESDielectricLoss(
             energy_weight=args.energy_weight, forces_weight=args.forces_weight
         )
     elif args.loss == "forces_only":
-        loss_fn = modules.WeightedForcesLoss(forces_weight=args.forces_weight)
+        loss_fn = modules.PESDielectricLoss(forces_weight=args.forces_weight)
     elif args.loss == "virials":
-        loss_fn = modules.WeightedEnergyForcesVirialsLoss(
+        loss_fn = modules.PESDielectricLoss(
             energy_weight=args.energy_weight,
             forces_weight=args.forces_weight,
             virials_weight=args.virials_weight,
         )
     elif args.loss == "stress":
-        loss_fn = modules.WeightedEnergyForcesStressLoss(
+        loss_fn = modules.PESDielectricLoss(
             energy_weight=args.energy_weight,
             forces_weight=args.forces_weight,
             stress_weight=args.stress_weight,
@@ -702,23 +709,32 @@ def get_loss_fn(
         assert (
             dipole_only is True
         ), "dipole loss can only be used with AtomicDipolesMACE model"
-        loss_fn = modules.DipoleSingleLoss(
+        loss_fn = modules.PESDielectricLoss(
             dipole_weight=args.dipole_weight,
         )
     elif args.loss == "dipole_polar":
-        loss_fn = modules.DipolePolarLoss(
+        loss_fn = modules.PESDielectricLoss(
             dipole_weight=args.dipole_weight,
             polarizability_weight=args.polarizability_weight,
         )
     elif args.loss == "energy_forces_dipole":
         assert dipole_only is False and compute_dipole is True
-        loss_fn = modules.WeightedEnergyForcesDipoleLoss(
+        loss_fn = modules.PESDielectricLoss(
             energy_weight=args.energy_weight,
             forces_weight=args.forces_weight,
             dipole_weight=args.dipole_weight,
         )
+    elif args.loss == "pes+dipole":
+        assert dipole_only is False and compute_dipole is True
+        loss_fn = modules.PESDielectricLoss(
+            energy_weight=args.energy_weight,
+            forces_weight=args.forces_weight,
+            stress_weight=args.stress_weight,
+            dipole_weight=args.dipole_weight,
+            bec_weight=args.bec_weight,
+        )
     else:
-        loss_fn = modules.WeightedEnergyForcesLoss(energy_weight=1.0, forces_weight=1.0)
+        loss_fn = modules.PESDielectricLoss(energy_weight=1.0, forces_weight=1.0)
     return loss_fn
 
 
@@ -739,10 +755,28 @@ def get_swa(
                 f"Start Stage Two must be less than max_num_epochs, got {args.start_swa} > {args.max_num_epochs}"
             )
             swas[-1] = False
-    if args.loss == "forces_only":
+    if args.loss == "pes":
+        loss_fn_energy = modules.PESDielectricLoss(
+            energy_weight=args.swa_energy_weight,
+            forces_weight=args.swa_forces_weight,
+            stress_weight=args.swa_stress_weight,
+            virials_weight=args.swa_virials_weight,
+        )
+        logging.info(
+            f"Stage Two (after {args.start_swa} epochs) with loss function: {loss_fn_energy}, energy weight : {args.swa_energy_weight}, forces weight : {args.swa_forces_weight}, stress weight : {args.swa_stress_weight}, virials_weight: {args.swa_virials_weight} and learning rate : {args.swa_lr}"
+        )
+    elif args.loss == "forces_only":
         raise ValueError("Can not select Stage Two with forces only loss.")
-    if args.loss == "virials":
-        loss_fn_energy = modules.WeightedEnergyForcesVirialsLoss(
+    if args.loss == "weighted":
+        loss_fn_energy = modules.PESDielectricLoss(
+            energy_weight=args.swa_energy_weight,
+            forces_weight=args.swa_forces_weight,
+        )
+        logging.info(
+            f"Stage Two (after {args.start_swa} epochs) with loss function: {loss_fn_energy}, energy weight : {args.swa_energy_weight}, forces weight : {args.swa_forces_weight} and learning rate : {args.swa_lr}"
+        )
+    elif args.loss == "virials":
+        loss_fn_energy = modules.PESDielectricLoss(
             energy_weight=args.swa_energy_weight,
             forces_weight=args.swa_forces_weight,
             virials_weight=args.swa_virials_weight,
@@ -751,7 +785,7 @@ def get_swa(
             f"Stage Two (after {args.start_swa} epochs) with loss function: {loss_fn_energy}, energy weight : {args.swa_energy_weight}, forces weight : {args.swa_forces_weight},  virials_weight: {args.swa_virials_weight} and learning rate : {args.swa_lr}"
         )
     elif args.loss == "stress":
-        loss_fn_energy = modules.WeightedEnergyForcesStressLoss(
+        loss_fn_energy = modules.PESDielectricLoss(
             energy_weight=args.swa_energy_weight,
             forces_weight=args.swa_forces_weight,
             stress_weight=args.swa_stress_weight,
@@ -760,7 +794,7 @@ def get_swa(
             f"Stage Two (after {args.start_swa} epochs) with loss function: {loss_fn_energy}, energy weight : {args.swa_energy_weight}, forces weight : {args.swa_forces_weight}, stress weight : {args.swa_stress_weight} and learning rate : {args.swa_lr}"
         )
     elif args.loss == "dipole_polar":
-        loss_fn_energy = modules.DipolePolarLoss(
+        loss_fn_energy = modules.PESDielectricLoss(
             dipole_weight=args.swa_dipole_weight,
             polarizability_weight=args.swa_polarizability_weight,
         )
@@ -768,8 +802,8 @@ def get_swa(
             f"Stage Two (after {args.start_swa} epochs) with loss function: {loss_fn_energy}, dipole weight : {args.swa_dipole_weight}, polarizability weight : {args.swa_polarizability_weight}, and learning rate : {args.swa_lr}"
         )
     elif args.loss == "energy_forces_dipole":
-        loss_fn_energy = modules.WeightedEnergyForcesDipoleLoss(
-            args.swa_energy_weight,
+        loss_fn_energy = modules.PESDielectricLoss(
+            energy_weight=args.swa_energy_weight,
             forces_weight=args.swa_forces_weight,
             dipole_weight=args.swa_dipole_weight,
         )
@@ -786,13 +820,20 @@ def get_swa(
         logging.info(
             f"Stage Two (after {args.start_swa} epochs) with loss function: {loss_fn_energy}, with energy weight : {args.swa_energy_weight}, forces weight : {args.swa_forces_weight}, stress weight : {args.swa_stress_weight} and learning rate : {args.swa_lr}"
         )
-    else:
-        loss_fn_energy = modules.WeightedEnergyForcesLoss(
+    elif args.loss == "pes+dipole":
+        loss_fn_energy = modules.PESDielectricLoss(
             energy_weight=args.swa_energy_weight,
             forces_weight=args.swa_forces_weight,
+            stress_weight=args.swa_stress_weight,
+            dipole_weight=args.swa_dipole_weight,
+            bec_weight=args.swa_bec_weight,
         )
         logging.info(
-            f"Stage Two (after {args.start_swa} epochs) with loss function: {loss_fn_energy}, with energy weight : {args.swa_energy_weight}, forces weight : {args.swa_forces_weight} and learning rate : {args.swa_lr}"
+            f"Stage Two (after {args.start_swa} epochs) with loss function: {loss_fn_energy}, energy weight : {args.swa_energy_weight}, forces weight : {args.swa_forces_weight}, stress weight : {args.swa_stress_weight}, dipole weight : {args.swa_dipole_weight} and learning rate : {args.swa_lr}"
+        )
+    else:
+        raise ValueError(
+            f"Stage Two requires a different loss function than {args.loss}"
         )
     swa = SWAContainer(
         model=AveragedModel(model),
@@ -902,6 +943,14 @@ def get_params_options(
             {
                 "name": "les_readouts",
                 "params": model.les_readouts.parameters(),
+                "weight_decay": 0.0,
+            }
+        )
+    if hasattr(model, "extra_readouts") and model.extra_readouts is not None:
+        param_options["params"].append(
+            {
+                "name": "extra_readouts",
+                "params": model.extra_readouts.parameters(),
                 "weight_decay": 0.0,
             }
         )
@@ -1036,23 +1085,14 @@ def check_path_ase_read(filename: Optional[str]) -> bool:
     if filepath.is_dir():
         num_h5_files = len(list(filepath.glob("*.h5")))
         num_hdf5_files = len(list(filepath.glob("*.hdf5")))
-        num_ldb_files = len(list(filepath.glob("*.lmdb")))
-        num_aselmbd_files = len(list(filepath.glob("*.aselmdb")))
         num_mdb_files = len(list(filepath.glob("*.mdb")))
-        if (
-            num_h5_files
-            + num_hdf5_files
-            + num_ldb_files
-            + num_aselmbd_files
-            + num_mdb_files
-            == 0
-        ):
+        if num_h5_files + num_hdf5_files + num_mdb_files == 0:
             # print all the files in the directory extension in the directory for debugging
             for file in os.listdir(filepath):
                 print(file)
             raise RuntimeError(f"No supported files found in directory '{filename}'")
         return False
-    if filepath.suffix in (".h5", ".hdf5", ".lmdb", ".aselmdb", ".mdb"):
+    if filepath.suffix in (".h5", ".hdf5", ".mdb"):
         return False
     return True
 

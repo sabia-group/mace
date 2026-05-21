@@ -73,7 +73,7 @@ class MACECalculator(Calculator):
         model_type: str, type of model to load
                     Options: [MACE, DipoleMACE, EnergyDipoleMACE]
 
-    Dipoles are returned in units of Debye
+    Dipoles are returned in units of e*angstrom
     """
 
     def __init__(

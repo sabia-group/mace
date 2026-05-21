@@ -32,9 +32,10 @@ from .blocks import (
 )
 from .utils import (
     compute_dielectric_gradients,
-    compute_fixed_charge_dipole,
+    compute_dielectric_gradients_loop,
     compute_fixed_charge_dipole_polar,
     get_atomic_virials_stresses,
+    get_dipole_outputs,
     get_edge_vectors_and_lengths,
     get_outputs,
     get_symmetric_displacement,
@@ -666,7 +667,9 @@ class AtomicDipolesMACE(torch.nn.Module):
         node_attr_irreps = o3.Irreps([(num_elements, (0, 1))])
         node_feats_irreps = o3.Irreps([(hidden_irreps.count(o3.Irrep(0, 1)), (0, 1))])
         self.node_embedding = LinearNodeEmbeddingBlock(
-            irreps_in=node_attr_irreps, irreps_out=node_feats_irreps
+            irreps_in=node_attr_irreps,
+            irreps_out=node_feats_irreps,
+            cueq_config=cueq_config,
         )
         self.radial_embedding = RadialEmbeddingBlock(
             r_max=r_max,
@@ -695,6 +698,7 @@ class AtomicDipolesMACE(torch.nn.Module):
             hidden_irreps=hidden_irreps,
             avg_num_neighbors=avg_num_neighbors,
             radial_MLP=radial_MLP,
+            cueq_config=cueq_config,
         )
         self.interactions = torch.nn.ModuleList([inter])
 
@@ -710,11 +714,16 @@ class AtomicDipolesMACE(torch.nn.Module):
             correlation=correlation,
             num_elements=num_elements,
             use_sc=use_sc_first,
+            cueq_config=cueq_config,
         )
         self.products = torch.nn.ModuleList([prod])
 
         self.readouts = torch.nn.ModuleList()
-        self.readouts.append(LinearDipoleReadoutBlock(hidden_irreps, dipole_only=True))
+        self.readouts.append(
+            LinearDipoleReadoutBlock(
+                hidden_irreps, dipole_only=True, cueq_config=cueq_config
+            )
+        )
 
         for i in range(num_interactions - 1):
             if i == num_interactions - 2:
@@ -735,6 +744,7 @@ class AtomicDipolesMACE(torch.nn.Module):
                 hidden_irreps=hidden_irreps_out,
                 avg_num_neighbors=avg_num_neighbors,
                 radial_MLP=radial_MLP,
+                cueq_config=cueq_config,
             )
             self.interactions.append(inter)
             prod = EquivariantProductBasisBlock(
@@ -743,17 +753,24 @@ class AtomicDipolesMACE(torch.nn.Module):
                 correlation=correlation,
                 num_elements=num_elements,
                 use_sc=True,
+                cueq_config=cueq_config,
             )
             self.products.append(prod)
             if i == num_interactions - 2:
                 self.readouts.append(
                     NonLinearDipoleReadoutBlock(
-                        hidden_irreps_out, MLP_irreps, gate, dipole_only=True
+                        hidden_irreps_out,
+                        MLP_irreps,
+                        gate,
+                        dipole_only=True,
+                        cueq_config=cueq_config,
                     )
                 )
             else:
                 self.readouts.append(
-                    LinearDipoleReadoutBlock(hidden_irreps, dipole_only=True)
+                    LinearDipoleReadoutBlock(
+                        hidden_irreps, dipole_only=True, cueq_config=cueq_config
+                    )
                 )
 
     def forward(
@@ -810,29 +827,20 @@ class AtomicDipolesMACE(torch.nn.Module):
             dipoles.append(node_dipoles)
 
         # Compute the dipoles
-        contributions_dipoles = torch.stack(
-            dipoles, dim=-1
-        )  # [n_nodes,3,n_contributions]
-        atomic_dipoles = torch.sum(contributions_dipoles, dim=-1)  # [n_nodes,3]
-        total_dipole = scatter_sum(
-            src=atomic_dipoles,
-            index=data["batch"],
-            dim=0,
-            dim_size=num_graphs,
-        )  # [n_graphs,3]
-        baseline = compute_fixed_charge_dipole(
-            charges=data["charges"],
-            positions=data["positions"],
-            batch=data["batch"],
-            num_graphs=num_graphs,
-        )  # [n_graphs,3]
-        total_dipole = total_dipole + baseline
+        dipoles = torch.stack(dipoles, dim=-1)  # [n_nodes,3,n_contributions]
+        atomic_dipoles = torch.sum(dipoles, dim=-1)  # [n_nodes,3]
 
-        output = {
+        total_node_dipoles, baseline_atomic = get_dipole_outputs(
+            atomic_dipoles, data["oxn"], data["positions"]
+        )
+        total_dipole = scatter_sum(
+            src=total_node_dipoles, index=data["batch"], dim=0, dim_size=num_graphs
+        )
+        return {
             "dipole": total_dipole,
             "atomic_dipoles": atomic_dipoles,
+            "atomic-oxn-dipole": baseline_atomic,
         }
-        return output
 
 
 @compile_mode("script")
@@ -1166,7 +1174,7 @@ class AtomicDielectricMACE(torch.nn.Module):
 
 
 @compile_mode("script")
-class EnergyDipolesMACE(torch.nn.Module):
+class EnergyDipoleMACE(torch.nn.Module):
     def __init__(
         self,
         r_max: float,
@@ -1205,7 +1213,9 @@ class EnergyDipolesMACE(torch.nn.Module):
         node_attr_irreps = o3.Irreps([(num_elements, (0, 1))])
         node_feats_irreps = o3.Irreps([(hidden_irreps.count(o3.Irrep(0, 1)), (0, 1))])
         self.node_embedding = LinearNodeEmbeddingBlock(
-            irreps_in=node_attr_irreps, irreps_out=node_feats_irreps
+            irreps_in=node_attr_irreps,
+            irreps_out=node_feats_irreps,
+            cueq_config=cueq_config,
         )
         self.radial_embedding = RadialEmbeddingBlock(
             r_max=r_max,
@@ -1234,6 +1244,7 @@ class EnergyDipolesMACE(torch.nn.Module):
             hidden_irreps=hidden_irreps,
             avg_num_neighbors=avg_num_neighbors,
             radial_MLP=radial_MLP,
+            cueq_config=cueq_config,
         )
         self.interactions = torch.nn.ModuleList([inter])
 
@@ -1249,11 +1260,16 @@ class EnergyDipolesMACE(torch.nn.Module):
             correlation=correlation,
             num_elements=num_elements,
             use_sc=use_sc_first,
+            cueq_config=cueq_config,
         )
         self.products = torch.nn.ModuleList([prod])
 
         self.readouts = torch.nn.ModuleList()
-        self.readouts.append(LinearDipoleReadoutBlock(hidden_irreps, dipole_only=False))
+        self.readouts.append(
+            LinearDipoleReadoutBlock(
+                hidden_irreps, dipole_only=False, cueq_config=cueq_config
+            )
+        )
 
         for i in range(num_interactions - 1):
             if i == num_interactions - 2:
@@ -1274,6 +1290,7 @@ class EnergyDipolesMACE(torch.nn.Module):
                 hidden_irreps=hidden_irreps_out,
                 avg_num_neighbors=avg_num_neighbors,
                 radial_MLP=radial_MLP,
+                cueq_config=cueq_config,
             )
             self.interactions.append(inter)
             prod = EquivariantProductBasisBlock(
@@ -1282,17 +1299,24 @@ class EnergyDipolesMACE(torch.nn.Module):
                 correlation=correlation,
                 num_elements=num_elements,
                 use_sc=True,
+                cueq_config=cueq_config,
             )
             self.products.append(prod)
             if i == num_interactions - 2:
                 self.readouts.append(
                     NonLinearDipoleReadoutBlock(
-                        hidden_irreps_out, MLP_irreps, gate, dipole_only=False
+                        hidden_irreps_out,
+                        MLP_irreps,
+                        gate,
+                        dipole_only=False,
+                        cueq_config=cueq_config,
                     )
                 )
             else:
                 self.readouts.append(
-                    LinearDipoleReadoutBlock(hidden_irreps, dipole_only=False)
+                    LinearDipoleReadoutBlock(
+                        hidden_irreps, dipole_only=False, cueq_config=cueq_config
+                    )
                 )
 
     def forward(
@@ -1303,6 +1327,7 @@ class EnergyDipolesMACE(torch.nn.Module):
         compute_virials: bool = False,
         compute_stress: bool = False,
         compute_displacement: bool = False,
+        compute_bec: bool = False,
         compute_edge_forces: bool = False,  # pylint: disable=W0613
         compute_atomic_stresses: bool = False,  # pylint: disable=W0613
     ) -> Dict[str, Optional[torch.Tensor]]:
@@ -1310,7 +1335,8 @@ class EnergyDipolesMACE(torch.nn.Module):
         data["node_attrs"].requires_grad_(True)
         data["positions"].requires_grad_(True)
         num_graphs = data["ptr"].numel() - 1
-        num_atoms_arange = torch.arange(data["positions"].shape[0])
+        num_nodes = data["positions"].shape[0]
+        num_atoms_arange = torch.arange(num_nodes)
         displacement = torch.zeros(
             (num_graphs, 3, 3),
             dtype=data["positions"].dtype,
@@ -1334,9 +1360,9 @@ class EnergyDipolesMACE(torch.nn.Module):
         node_e0 = self.atomic_energies_fn(data["node_attrs"])[
             num_atoms_arange, data["head"][data["batch"]]
         ]
-        e0 = scatter_sum(
-            src=node_e0, index=data["batch"], dim=-1, dim_size=num_graphs
-        )  # [n_graphs,]
+        # e0 = scatter_sum(
+        #     src=node_e0, index=data["batch"], dim=-1, dim_size=num_graphs
+        # )  # [n_graphs,]
 
         # Embeddings
         node_feats = self.node_embedding(data["node_attrs"])
@@ -1351,11 +1377,15 @@ class EnergyDipolesMACE(torch.nn.Module):
         )
 
         # Interactions
-        energies = [e0]
-        node_energies_list = [node_e0]
-        dipoles = []
-        for interaction, product, readout in zip(
-            self.interactions, self.products, self.readouts
+        n_components = 4
+        num_interactions = len(self.interactions)
+        attributes = torch.zeros(
+            (num_nodes, num_interactions + 1, n_components),
+            device=data["positions"].device,
+        )  # [n_nodes,n_contributions,n_components]
+        attributes[:, 0, 0] = node_e0
+        for n, (interaction, product, readout) in enumerate(
+            zip(self.interactions, self.products, self.readouts)
         ):
             node_feats, sc = interaction(
                 node_attrs=data["node_attrs"],
@@ -1370,59 +1400,97 @@ class EnergyDipolesMACE(torch.nn.Module):
                 sc=sc,
                 node_attrs=data["node_attrs"],
             )
-            node_out = readout(node_feats).squeeze(-1)  # [n_nodes, ]
-            # node_energies = readout(node_feats).squeeze(-1)  # [n_nodes, ]
-            node_energies = node_out[:, 0]
-            energy = scatter_sum(
-                src=node_energies, index=data["batch"], dim=-1, dim_size=num_graphs
-            )  # [n_graphs,]
-            energies.append(energy)
-            node_dipoles = node_out[:, 1:]
-            dipoles.append(node_dipoles)
+            attributes[:, n + 1, :] = readout(node_feats).squeeze(-1)  # [n_nodes, ]
 
-        # Compute the energies and dipoles
-        contributions = torch.stack(energies, dim=-1)
-        total_energy = torch.sum(contributions, dim=-1)  # [n_graphs, ]
-        node_energy_contributions = torch.stack(node_energies_list, dim=-1)
-        node_energy = torch.sum(node_energy_contributions, dim=-1)  # [n_nodes, ]
-        contributions_dipoles = torch.stack(
-            dipoles, dim=-1
-        )  # [n_nodes,3,n_contributions]
-        atomic_dipoles = torch.sum(contributions_dipoles, dim=-1)  # [n_nodes,3]
-        total_dipole = scatter_sum(
-            src=atomic_dipoles,
-            index=data["batch"].unsqueeze(-1),
-            dim=0,
-            dim_size=num_graphs,
-        )  # [n_graphs,3]
-        baseline = compute_fixed_charge_dipole(
-            charges=data["charges"],
-            positions=data["positions"],
-            batch=data["batch"],
-            num_graphs=num_graphs,
-        )  # [n_graphs,3]
-        total_dipole = total_dipole + baseline
+        # sum over all the contributions (interations)
+        # [n_nodes,n_contributions,n_components] --> [n_nodes,n_components]
+        node_features = torch.sum(attributes, dim=1)
+        assert node_features.shape == (
+            num_nodes,
+            n_components,
+        ), f"'node_features' has the wrong shape, expected {(num_nodes,n_components)} but got {node_features.shape}"
+        node_energy = node_features[:, 0]
+        node_dipoles = node_features[:, 1:]
 
+        # gather over all nodes (atoms) belonging to the same graph (structure)
+        # [n_nodes,n_components] --> [n_graphs,n_components]
+        graph_features = scatter_sum(
+            src=node_features, index=data["batch"], dim=0, dim_size=num_graphs
+        )
+        assert graph_features.shape == (
+            num_graphs,
+            n_components,
+        ), f"'graph_features' has the wrong shape, expected {(num_graphs,n_components)} but got {graph_features.shape}"
+        total_energy = graph_features[:, 0]
+
+        # Attention:
+        # if we want to compute the Born Charges we need to call 'torch.autograd.grad' on the dipoles w.r.t. the positions.
+        # However, since the forces are always computed, MACE always calls 'torch.autograd.grad' on the energy w.r.t. the positions.
+        # This happens in 'compute_forces' in 'mace/modules/utils.py', which is called inside 'get_outputs'.
+        # If 'training' == False, in that function the computational graph will be destroy and the Born Charges can not be computed afterwards.
+        # For this reason, we set 'training' == True if we need the Born Charges so that the computational graph is preserved and we can call 'torch.autograd.grad' in 'compute_dielectric_gradients'.
+        # If you don't believe me, please have a look at the keyword 'retain_graph' in 'mace/modules/utils.py' in the function 'compute_forces'.
+
+        # energy, forces and stress
         forces, virials, stress, _, _ = get_outputs(
             energy=total_energy,
             positions=data["positions"],
             displacement=displacement,
             cell=data["cell"],
-            training=training,
+            training=training or compute_bec,
             compute_force=compute_force,
             compute_virials=compute_virials,
             compute_stress=compute_stress,
         )
 
-        output = {
-            "energy": total_energy,
-            "node_energy": node_energy,
-            "contributions": contributions,
-            "forces": forces,
+        # dipoles
+        total_node_dipoles, node_dipole_baseline = get_dipole_outputs(
+            node_dipoles, data["oxn"], data["positions"]
+        )
+        total_dipole = scatter_sum(
+            src=total_node_dipoles, index=data["batch"], dim=0, dim_size=num_graphs
+        )
+
+        out = {
+            "energy": total_energy,  # [n_graphs,]
+            "node_energy": node_energy,  # [n_nodes,]
+            "forces": forces,  # [n_nodes,3]
             "virials": virials,
             "stress": stress,
             "displacement": displacement,
-            "dipole": total_dipole,
-            "atomic_dipoles": atomic_dipoles,
+            "dipole": total_dipole,  # [n_graphs,3]
+            "atomic_dipoles": node_dipoles,  # [n_nodes,3]
+            "atomic-oxn-dipole": node_dipole_baseline,  # [n_nodes,3]
         }
-        return output
+
+        if compute_bec:
+
+            # bec.shape should be [3, n_nodes, 3]
+            # where the first dimension corresponds to the Cartesian components of the dipole
+            # the second dimension corresponds to the atoms,
+            # the third dimension corresponds to the Cartesian components of the positions.
+
+            # if you passed total_dipole[:,:2] into 'compute_dielectric_gradients_loop'
+            # you would get bec.shape == [2, n_nodes, 3]
+
+            bec = compute_dielectric_gradients_loop(
+                dielectric=total_dipole,  # [:,:2] try for debugging
+                inputs=[data["positions"]],
+                clean=not training,
+                training=training,
+            )[0]
+            assert bec.shape == (
+                3,
+                num_nodes,
+                3,
+            ), f"'bec' has the wrong shape, expected {(3, num_nodes, 3)} but got {bec.shape}."
+
+            # We reshape 'bec' so that it will have a shape that is ASE-readable
+            # ASE expects the Born Effective Charges to be in a shape (n_atoms, 3, 3):
+            # - the first dimension corresponds to the atoms
+            # - the second dimension corresponds to the Cartesian components of the positions,
+            # - the third dimension corresponds to the Cartesian components of the dipole.
+            # In this way every atom has 3x3 matrix, with dipole components as rows and position components as columns.
+            out["bec"] = bec.moveaxis(0, 2)  # [3', n_nodes, 3] --> [n_nodes, 3, 3']
+
+        return out

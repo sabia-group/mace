@@ -271,3 +271,7 @@ class EmptyParam(torch.nn.Parameter):
     ):  # pylint: disable=arguments-differ, arguments-renamed
         del mode
         return self
+
+    def __deepcopy__(self, memo):
+        # Ensure deepcopy works
+        return EmptyParam(self.data.clone())

@@ -125,6 +125,9 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
             "DipoleMAE",
             "DipolePolarRMSE",
             "EnergyDipoleRMSE",
+            "pes+mu",
+            "pes+mu+bec",
+            "pes+bec",
         ],
         default="PerAtomRMSE",
     )
@@ -143,7 +146,7 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
             "ScaleShiftBOTNet",
             "AtomicDipolesMACE",
             "AtomicDielectricMACE",
-            "EnergyDipolesMACE",
+            "EnergyDipoleMACE",
         ],
     )
     parser.add_argument(
@@ -706,6 +709,24 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         default=DefaultKeys.ELEC_TEMP.value,
     )
     parser.add_argument(
+        "--oxn_key",
+        help="Key of oxidation numbers in training xyz",
+        type=str,
+        default=DefaultKeys.OXN.value,
+    )
+    parser.add_argument(
+        "--bec_key",
+        help="Key of oxidation numbers in training xyz",
+        type=str,
+        default=DefaultKeys.BEC.value,
+    )
+    parser.add_argument(
+        "--compute_bec",
+        help="compute BEC",
+        # action="store_true",
+        default=None,
+    )
+    parser.add_argument(
         "--total_spin_key",
         help="Key of total spin in training xyz",
         type=str,
@@ -753,7 +774,8 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         help="type of loss",
         default="weighted",
         choices=[
-            "ef",
+            "pes",
+            "pes+dipole",
             "weighted",
             "forces_only",
             "virials",
@@ -820,6 +842,17 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         type=float,
         default=1.0,
         dest="swa_dipole_weight",
+    )
+    parser.add_argument(
+        "--bec_weight", help="weight of BEC loss", type=float, default=1.0
+    )
+    parser.add_argument(
+        "--swa_bec_weight",
+        "--stage_two_bec_weight",
+        help="weight of BEC after starting Stage Two (previously called swa)",
+        type=float,
+        default=1.0,
+        dest="swa_bec_weight",
     )
     parser.add_argument(
         "--swa_polarizability_weight",
@@ -1092,6 +1125,18 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
             "energy_weight",
             "forces_weight",
         ],
+    )
+    parser.add_argument(
+        "--use_pbc_dipole",
+        help="Use a periodic loss for the dipole (available only if all structures are periodic)",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "--transpose_bec",
+        help="Transpose the Born Effective charges in the datasets.",
+        action="store_true",
+        default=False,
     )
     return parser
 

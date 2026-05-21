@@ -9,7 +9,7 @@ import torch
 import torch.distributed
 from torchmetrics import Metric
 
-from mace.tools.utils import filter_nonzero_weight
+from mace.tools.utils import filter_nonzero_weight, get_model_output
 
 plt.rcParams.update({"font.size": 8})
 mpl_logger = logging.getLogger("matplotlib")
@@ -71,14 +71,14 @@ error_type = {
     ),
     "DipoleRMSE": (
         [
-            ("rmse_mu_per_atom", "RMSE MU/atom [mDebye]"),
+            ("rmse_mu_per_atom", "RMSE MU/atom [me*ang]"),
             ("rel_rmse_f", "Relative MU RMSE [%]"),
         ],
-        [("dipole", "Dipole per atom [Debye]")],
+        [("dipole", "Dipole per atom [e*ang]")],
     ),
     "DipoleMAE": (
-        [("mae_mu", "MAE MU [mDebye]"), ("rel_mae_f", "Relative MU MAE [%]")],
-        [("dipole", "Dipole per atom [Debye]")],
+        [("mae_mu", "MAE MU [me*ang]"), ("rel_mae_f", "Relative MU MAE [%]")],
+        [("dipole", "Dipole per atom [e*ang]")],
     ),
     "DipolePolarRMSE": (
         [
@@ -96,12 +96,58 @@ error_type = {
         [
             ("rmse_e_per_atom", "RMSE E/atom [meV]"),
             ("rmse_f", "RMSE F [meV / A]"),
-            ("rmse_mu_per_atom", "RMSE MU/atom [mDebye]"),
+            ("rmse_mu_per_atom", "RMSE MU/atom [me*ang]"),
         ],
         [
             ("energy", "Energy per atom [eV]"),
             ("force", "Force [eV / A]"),
-            ("dipole", "Dipole per atom [Debye]"),
+            ("dipole", "Dipole per atom [e*ang]"),
+        ],
+    ),
+    "pes+mu": (
+        [
+            ("rmse_e_per_atom", "RMSE E/atom [meV]"),
+            ("rmse_f", "RMSE F [meV / A]"),
+            ("rmse_stress", "RMSE Stress [meV / A^3]"),
+            ("rmse_mu_per_atom", "RMSE MU/atom [me*ang]"),
+        ],
+        [
+            ("energy", "Energy per atom [eV]"),
+            ("force", "Force [eV / A]"),
+            ("stress", "Stress [eV / A^3]"),
+            ("dipole", "Dipole per atom [e*ang]"),
+        ],
+    ),
+    "pes+bec": (
+        [
+            ("rmse_e_per_atom", "RMSE E/atom [meV]"),
+            ("rmse_f", "RMSE F [meV / A]"),
+            ("rmse_stress", "RMSE Stress [meV / A^3]"),
+            # ("rmse_mu_per_atom", "RMSE MU/atom [me*ang]"),
+            ("rmse_bec", "RMSE BEC [me]"),
+        ],
+        [
+            ("energy", "Energy per atom [eV]"),
+            ("force", "Force [eV / A]"),
+            ("stress", "Stress [eV / A^3]"),
+            # ("dipole", "Dipole per atom [e*ang]"),
+            ("bec", "Born Charges [e]"),
+        ],
+    ),
+    "pes+mu+bec": (
+        [
+            ("rmse_e_per_atom", "RMSE E/atom [meV]"),
+            ("rmse_f", "RMSE F [meV / A]"),
+            ("rmse_stress", "RMSE Stress [meV / A^3]"),
+            ("rmse_mu_per_atom", "RMSE MU/atom [me*ang]"),
+            ("rmse_bec", "RMSE BEC [me]"),
+        ],
+        [
+            ("energy", "Energy per atom [eV]"),
+            ("force", "Force [eV / A]"),
+            ("stress", "Stress [eV / A^3]"),
+            ("dipole", "Dipole per atom [e*ang]"),
+            ("bec", "Born Charges [e]"),
         ],
     ),
 }
@@ -378,6 +424,15 @@ def plot_inference_from_results(
                     label=name,
                 )
 
+            elif key == "bec" and "bec" in result:
+                scatter = ax.scatter(
+                    result["bec"]["reference"],
+                    result["bec"]["predicted"],
+                    marker=marker,
+                    color=fixed_color_train_valid,
+                    label=name,
+                )
+
             # Add each train/valid dataset's name to the legend if scatter was assigned
             if scatter is not None:
                 legend_labels[name] = scatter
@@ -435,6 +490,15 @@ def plot_inference_from_results(
                     label="Test",
                 )
 
+            elif key == "bec" and "bec" in result:
+                scatter = ax.scatter(
+                    result["bec"]["reference"],
+                    result["bec"]["predicted"],
+                    marker=marker,
+                    color=fixed_color_train_valid,
+                    label=name,
+                )
+
             # Only add to legend_labels if scatter was assigned
             if scatter is not None:
                 legend_labels["Test"] = scatter
@@ -484,15 +548,7 @@ def model_inference(
 
         for batch in data_loader:
             batch = batch.to(device)
-            batch_dict = batch.to_dict()
-            output = model(
-                batch_dict,
-                training=False,
-                compute_force=output_args.get("forces", False),
-                compute_virials=output_args.get("virials", False),
-                compute_stress=output_args.get("stress", False),
-            )
-
+            output = get_model_output(model, batch, output_args)
             results = scatter_metric(batch, output)
 
         if distributed:
@@ -532,6 +588,8 @@ class InferenceMetric(Metric):
         self.add_state("pred_virials", default=[], dist_reduce_fx="cat")
         self.add_state("ref_dipole", default=[], dist_reduce_fx="cat")
         self.add_state("pred_dipole", default=[], dist_reduce_fx="cat")
+        self.add_state("ref_bec", default=[], dist_reduce_fx="cat")
+        self.add_state("pred_bec", default=[], dist_reduce_fx="cat")
 
         # Per-atom normalized values
         self.add_state("ref_energies_per_atom", default=[], dist_reduce_fx="cat")
@@ -559,6 +617,7 @@ class InferenceMetric(Metric):
         self.add_state("n_stress", default=torch.tensor(0.0), dist_reduce_fx="sum")
         self.add_state("n_virials", default=torch.tensor(0.0), dist_reduce_fx="sum")
         self.add_state("n_dipole", default=torch.tensor(0.0), dist_reduce_fx="sum")
+        self.add_state("n_bec", default=torch.tensor(0.0), dist_reduce_fx="sum")
 
     def update(self, batch, output):  # pylint: disable=arguments-differ
         """Update metric states with new batch data."""
@@ -712,6 +771,20 @@ class InferenceMetric(Metric):
 
         # Dipole
         if output.get("dipole") is not None and batch.dipole is not None:
+            import os
+
+            if os.environ.get("USE_PBC_DIPOLE", "false").lower() in (
+                "1",
+                "true",
+                "yes",
+                "on",
+            ):
+                from mace.tools.utils import shift_ref_dipole
+
+                batch.dipole = shift_ref_dipole(
+                    batch.cell, batch.pbc, batch.dipole, output["dipole"]
+                )
+
             self.ref_dipole.append(batch.dipole)
             self.pred_dipole.append(output["dipole"])
             atoms_per_config_3d = atoms_per_config.view(-1, 1)
@@ -719,24 +792,46 @@ class InferenceMetric(Metric):
             self.pred_dipole_per_atom.append(output["dipole"] / atoms_per_config_3d)
 
             self.n_dipole += filter_nonzero_weight(
-                batch, self.ref_dipole, batch.weight, batch.dipole_weight, "config"
+                batch, self.ref_dipole, batch.weight, batch.dipole_weight, False, True
             )
             filter_nonzero_weight(
-                batch, self.pred_dipole, batch.weight, batch.dipole_weight, "config"
+                batch, self.pred_dipole, batch.weight, batch.dipole_weight, False, True
             )
             filter_nonzero_weight(
                 batch,
                 self.ref_dipole_per_atom,
                 batch.weight,
                 batch.dipole_weight,
-                spread_quantity_vector=False,
+                False,
+                True,
             )
             filter_nonzero_weight(
                 batch,
                 self.pred_dipole_per_atom,
                 batch.weight,
                 batch.dipole_weight,
-                spread_quantity_vector=False,
+                False,
+                True,
+            )
+
+        # Forces
+        if output.get("bec") is not None and batch.bec is not None:
+            self.ref_bec.append(batch.bec)
+            self.pred_bec.append(output["bec"])
+
+            self.n_bec += filter_nonzero_weight(
+                batch,
+                self.ref_bec,
+                batch.weight,
+                batch.bec_weight,
+                spread_atoms=True,
+            )
+            filter_nonzero_weight(
+                batch,
+                self.pred_bec,
+                batch.weight,
+                batch.bec_weight,
+                spread_atoms=True,
             )
 
     def _process_data(self, ref_list, pred_list):
@@ -829,5 +924,12 @@ class InferenceMetric(Metric):
                 "predicted": pred_d,
                 "reference_per_atom": ref_d_pa,
                 "predicted_per_atom": pred_d_pa,
+            }
+
+        if self.n_bec:
+            ref_z, pred_z = self._process_data(self.ref_bec, self.pred_bec)
+            results["bec"] = {
+                "reference": ref_z,
+                "predicted": pred_z,
             }
         return results

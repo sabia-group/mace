@@ -26,22 +26,16 @@ from .blocks import (
 )
 from .extensions import PolarMACE
 from .loss import (
-    DipolePolarLoss,
-    DipoleSingleLoss,
+    PESDielectricLoss,
     UniversalLoss,
-    WeightedEnergyForcesDipoleLoss,
     WeightedEnergyForcesL1L2Loss,
-    WeightedEnergyForcesLoss,
-    WeightedEnergyForcesStressLoss,
-    WeightedEnergyForcesVirialsLoss,
-    WeightedForcesLoss,
     WeightedHuberEnergyForcesStressLoss,
 )
 from .models import (
     MACE,
     AtomicDielectricMACE,
     AtomicDipolesMACE,
-    EnergyDipolesMACE,
+    EnergyDipoleMACE,
     ScaleShiftMACE,
 )
 from .radial import BesselBasis, GaussianBasis, PolynomialCutoff, ZBLBasis
@@ -109,14 +103,9 @@ __all__ = [
     "ScaleShiftMACE",
     "AtomicDipolesMACE",
     "AtomicDielectricMACE",
-    "EnergyDipolesMACE",
+    "EnergyDipoleMACE",
+    "PESDielectricLoss",
     "PolarMACE",
-    "WeightedEnergyForcesLoss",
-    "WeightedForcesLoss",
-    "WeightedEnergyForcesVirialsLoss",
-    "WeightedEnergyForcesStressLoss",
-    "DipoleSingleLoss",
-    "WeightedEnergyForcesDipoleLoss",
     "WeightedHuberEnergyForcesStressLoss",
     "UniversalLoss",
     "WeightedEnergyForcesL1L2Loss",

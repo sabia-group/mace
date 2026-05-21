@@ -4,6 +4,7 @@
 # This program is distributed under the MIT License (see MIT.md)
 ###########################################################################################
 
+import os
 from copy import deepcopy
 from typing import Optional, Sequence
 
@@ -44,6 +45,7 @@ class AtomicData(torch_geometric.data.Data):
     weight: torch.Tensor
     energy_weight: torch.Tensor
     forces_weight: torch.Tensor
+    bec_weight: torch.Tensor
     stress_weight: torch.Tensor
     virials_weight: torch.Tensor
     dipole_weight: torch.Tensor
@@ -67,6 +69,7 @@ class AtomicData(torch_geometric.data.Data):
         head: Optional[torch.Tensor],  # [,]
         energy_weight: Optional[torch.Tensor],  # [,]
         forces_weight: Optional[torch.Tensor],  # [,]
+        bec_weight: Optional[torch.Tensor],  # [,]
         stress_weight: Optional[torch.Tensor],  # [,]
         virials_weight: Optional[torch.Tensor],  # [,]
         dipole_weight: Optional[torch.Tensor],  # [,]
@@ -83,12 +86,15 @@ class AtomicData(torch_geometric.data.Data):
         total_charge: Optional[torch.Tensor] = None,  # [,]
         total_spin: Optional[torch.Tensor] = None,  # [,]
         pbc: Optional[torch.Tensor] = None,  # [, 3]
+        oxn: Optional[torch.Tensor] = None,  # [n_nodes, ]
+        bec: Optional[torch.Tensor] = None,  # [n_nodes,3,3]
         density_coefficients: Optional[torch.Tensor] = None,  # [n_nodes, k]
         rcell: Optional[torch.Tensor] = None,  # [3,3]
         volume: Optional[torch.Tensor] = None,  # [,]
         fermi_level: Optional[torch.Tensor] = None,  # [,]
         external_field: Optional[torch.Tensor] = None,  # [1,3]
-        **extra_data: torch.Tensor,
+        **extra_data: torch.Tensor,  # additional properties that aren't hard-coded and therefore not
+        # for correct shape, etc
     ):
         # Check shapes
         num_nodes = node_attrs.shape[0]
@@ -102,9 +108,10 @@ class AtomicData(torch_geometric.data.Data):
         assert head is None or len(head.shape) == 0
         assert energy_weight is None or len(energy_weight.shape) == 0
         assert forces_weight is None or len(forces_weight.shape) == 0
+        assert bec_weight is None or len(bec_weight.shape) == 0
         assert stress_weight is None or len(stress_weight.shape) == 0
         assert virials_weight is None or len(virials_weight.shape) == 0
-        assert dipole_weight is None or dipole_weight.shape == (1, 3), dipole_weight
+        # assert dipole_weight is None or dipole_weight.shape == (1, 3), dipole_weight
         assert charges_weight is None or len(charges_weight.shape) == 0
         assert cell is None or cell.shape == (3, 3)
         assert forces is None or forces.shape == (num_nodes, 3)
@@ -113,6 +120,8 @@ class AtomicData(torch_geometric.data.Data):
         assert virials is None or virials.shape == (1, 3, 3)
         assert dipole is None or dipole.shape[-1] == 3
         assert charges is None or charges.shape == (num_nodes,)
+        assert oxn is None or oxn.shape == (num_nodes,)
+        assert bec is None or bec.shape == (num_nodes, 3, 3)
         assert elec_temp is None or len(elec_temp.shape) == 0
         assert total_charge is None or len(total_charge.shape) == 0
         assert total_spin is None or len(total_spin.shape) == 0
@@ -139,6 +148,7 @@ class AtomicData(torch_geometric.data.Data):
             "head": head,
             "energy_weight": energy_weight,
             "forces_weight": forces_weight,
+            "bec_weight": bec_weight,
             "stress_weight": stress_weight,
             "virials_weight": virials_weight,
             "dipole_weight": dipole_weight,
@@ -150,6 +160,8 @@ class AtomicData(torch_geometric.data.Data):
             "virials": virials,
             "dipole": dipole,
             "charges": charges,
+            "oxn": oxn,
+            "bec": bec,
             "polarizability": polarizability,
             "elec_temp": elec_temp,
             "total_charge": total_charge,
@@ -167,7 +179,7 @@ class AtomicData(torch_geometric.data.Data):
     @classmethod
     def from_config(
         cls,
-        config: Configuration,
+        config: "Configuration",
         z_table: AtomicNumberTable,
         cutoff: float,
         heads: Optional[list] = None,
@@ -181,6 +193,7 @@ class AtomicData(torch_geometric.data.Data):
             pbc=deepcopy(config.pbc),
             cell=deepcopy(config.cell),
         )
+
         indices = atomic_numbers_to_indices(config.atomic_numbers, z_table=z_table)
         one_hot = to_one_hot(
             torch.tensor(indices, dtype=torch.long).unsqueeze(-1),
@@ -223,6 +236,14 @@ class AtomicData(torch_geometric.data.Data):
             else torch.tensor(1.0, dtype=torch.get_default_dtype())
         )
 
+        bec_weight = (
+            torch.tensor(
+                config.property_weights.get("bec"), dtype=torch.get_default_dtype()
+            )
+            if config.property_weights.get("bec") is not None
+            else torch.tensor(1.0, dtype=torch.get_default_dtype())
+        )
+
         stress_weight = (
             torch.tensor(
                 config.property_weights.get("stress"), dtype=torch.get_default_dtype()
@@ -244,14 +265,14 @@ class AtomicData(torch_geometric.data.Data):
                 config.property_weights.get("dipole"), dtype=torch.get_default_dtype()
             )
             if config.property_weights.get("dipole") is not None
-            else torch.tensor([[1.0, 1.0, 1.0]], dtype=torch.get_default_dtype())
+            else torch.tensor(1.0, dtype=torch.get_default_dtype())
         )
-        if len(dipole_weight.shape) == 0:
-            dipole_weight = dipole_weight * torch.tensor(
-                [[1.0, 1.0, 1.0]], dtype=torch.get_default_dtype()
-            )
-        elif len(dipole_weight.shape) == 1:
-            dipole_weight = dipole_weight.unsqueeze(0)
+        # if len(dipole_weight.shape) == 0:
+        #     dipole_weight = dipole_weight * torch.tensor(
+        #         [[1.0, 1.0, 1.0]], dtype=torch.get_default_dtype()
+        #     )
+        # elif len(dipole_weight.shape) == 1:
+        #     dipole_weight = dipole_weight.unsqueeze(0)
 
         charges_weight = (
             torch.tensor(
@@ -324,6 +345,29 @@ class AtomicData(torch_geometric.data.Data):
             if config.properties.get("charges") is not None
             else torch.zeros(num_atoms, dtype=torch.get_default_dtype())
         )
+        oxn = (
+            torch.tensor(config.properties.get("oxn"))
+            if config.properties.get("oxn") is not None
+            else torch.zeros(num_atoms, dtype=torch.get_default_dtype())
+        )
+        if not torch.all(oxn == oxn.floor()):
+            raise ValueError("oxn must contain integer values")
+        oxn = oxn.to(dtype=torch.get_default_dtype())
+        bec = (
+            torch.tensor(
+                config.properties.get("bec").reshape(num_atoms, 3, 3),
+                dtype=torch.get_default_dtype(),
+            )
+            if config.properties.get("bec") is not None
+            else torch.zeros(num_atoms, 3, 3, dtype=torch.get_default_dtype())
+        )
+        if os.environ.get("TRANSPOSE_BEC", "false").lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        ):
+            bec = torch.moveaxis(bec, 1, 2)
         elec_temp = (
             torch.tensor(
                 config.properties.get("elec_temp"),
@@ -407,6 +451,7 @@ class AtomicData(torch_geometric.data.Data):
             head=head,
             energy_weight=energy_weight,
             forces_weight=forces_weight,
+            bec_weight=bec_weight,
             stress_weight=stress_weight,
             virials_weight=virials_weight,
             dipole_weight=dipole_weight,
@@ -418,6 +463,8 @@ class AtomicData(torch_geometric.data.Data):
             virials=virials,
             dipole=dipole,
             charges=charges,
+            oxn=oxn,
+            bec=bec,
             elec_temp=elec_temp,
             total_charge=total_charge,
             polarizability=polarizability,

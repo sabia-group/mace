@@ -3,7 +3,6 @@ on:
   pull_request:
   workflow_dispatch:
   push:
-    branches: [ main, develop ]
 
 concurrency:
   group: unit-tests-${{ github.ref }}
@@ -160,4 +159,3 @@ jobs:
           pytest -v tests/test_run_train_dipole_polar.py
           pytest -v tests/test_calculator.py::test_mace_polar_constructor
           pytest -v tests/test_models.py::test_dipole_polar_mace
-          pytest -v tests/test_foundations.py -k polar

@@ -24,14 +24,22 @@ def configure_model(
 ):
     # Selecting outputs
     compute_virials = args.loss == "virials"
-    compute_stress = args.loss in ("stress", "huber", "universal")
+    compute_stress = args.loss in ("stress", "huber", "universal", "pes+dipole")
 
-    if compute_virials:
-        args.compute_virials = True
-        args.error_table = "PerAtomRMSEstressvirials"
-    elif compute_stress:
-        args.compute_stress = True
-        args.error_table = "PerAtomRMSEstressvirials"
+    # if args.error_table == "pes+mu":
+    #     assert (
+    #         not compute_virials
+    #     ), f"virials are not supported with error table {args.error_table}"
+    #     assert (
+    #         compute_stress
+    #     ), f"compute_stress must be true with error table {args.error_table}"
+    # else:
+    #     if compute_virials:
+    #         args.compute_virials = True
+    #         args.error_table = "PerAtomRMSEstressvirials"
+    #     elif compute_stress:
+    #         args.compute_stress = True
+    #         args.error_table = "PerAtomRMSEstressvirials"
 
     output_args = {
         "energy": args.compute_energy,
@@ -41,6 +49,8 @@ def configure_model(
         "dipoles": args.compute_dipole,
         "polarizabilities": args.compute_polarizability,
     }
+    if args.compute_bec is not None:
+        output_args["bec"] = bool(args.compute_bec)
     logging.info(
         f"During training the following quantities will be reported: {', '.join([f'{report}' for report, value in output_args.items() if value])}"
     )
@@ -353,7 +363,25 @@ def _build_model(
             ],
             MLP_irreps=o3.Irreps(args.MLP_irreps),
         )
-
+    if args.model == "EnergyDipoleMACE":
+        # assert args.loss in [
+        #     "energy_forces_dipole",
+        #     "pes+dipole",
+        # ], "Use energy_forces_dipole or pes+dipole loss with EnergyDipoleMACE model"
+        # assert args.error_table in [
+        #     "EnergyDipoleRMSE",
+        #     "pes+mu",
+        #     "PerAtomRMSEstressvirials"
+        # ], f"Use error_table EnergyDipoleRMSE or pes+mu  with EnergyDipoleMACE model (provided error table is {args.error_table })"
+        return modules.EnergyDipoleMACE(
+            **model_config,
+            correlation=args.correlation,
+            gate=modules.gate_dict[args.gate],
+            interaction_cls_first=modules.interaction_classes[
+                "RealAgnosticInteractionBlock"
+            ],
+            MLP_irreps=o3.Irreps(args.MLP_irreps),
+        )
     if args.model == "AtomicDielectricMACE":
         args.error_table = "DipolePolarRMSE"
         # std_df = modules.scaling_classes["rms_dipoles_scaling"](train_loader)
@@ -373,23 +401,6 @@ def _build_model(
             ],
             MLP_irreps=o3.Irreps(args.MLP_irreps),
             use_polarizability=True,
-        )
-
-    if args.model == "EnergyDipolesMACE":
-        assert (
-            args.loss == "energy_forces_dipole"
-        ), "Use energy_forces_dipole loss with EnergyDipolesMACE model"
-        assert (
-            args.error_table == "EnergyDipoleRMSE"
-        ), "Use error_table EnergyDipoleRMSE with AtomicDipolesMACE model"
-        return modules.EnergyDipolesMACE(
-            **model_config,
-            correlation=args.correlation,
-            gate=modules.gate_dict[args.gate],
-            interaction_cls_first=modules.interaction_classes[
-                "RealAgnosticInteractionBlock"
-            ],
-            MLP_irreps=o3.Irreps(args.MLP_irreps),
         )
     if args.model == "MACELES":
         from mace.modules.extensions import MACELES
@@ -413,4 +424,5 @@ def _build_model(
             use_last_readout_only=args.use_last_readout_only,
             use_agnostic_product=args.use_agnostic_product,
         )
+
     raise RuntimeError(f"Unknown model: '{args.model}'")

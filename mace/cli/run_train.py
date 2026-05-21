@@ -9,6 +9,7 @@ import glob
 import json
 import logging
 import os
+import traceback
 from copy import deepcopy
 from pathlib import Path
 from typing import List, Optional
@@ -126,6 +127,26 @@ def run(args) -> None:
     except AttributeError:
         logging.info("Cannot find MACE version, please install MACE via pip")
     logging.debug(f"Configuration: {args}")
+
+    # environment variables
+    value = str(args.use_pbc_dipole).lower()
+    if "USE_PBC_DIPOLE" in os.environ:  # set in the submission script
+        old_value = str(os.environ["USE_PBC_DIPOLE"]).lower()
+        logging.warning(
+            f"Environment variable 'USE_PBC_DIPOLE' already defined and equal to {old_value}, overwriting it to {value}."
+        )
+    os.environ["USE_PBC_DIPOLE"] = value
+    logging.info(f"Using environment variable 'USE_PBC_DIPOLE' equal to {value}")
+
+    # environment variables
+    value = str(args.transpose_bec).lower()
+    if "TRANSPOSE_BEC" in os.environ:  # set in the submission script
+        old_value = str(os.environ["TRANSPOSE_BEC"]).lower()
+        logging.warning(
+            f"Environment variable 'TRANSPOSE_BEC' already defined and equal to {old_value}, overwriting it to {value}."
+        )
+    os.environ["TRANSPOSE_BEC"] = value
+    logging.info(f"Using environment variable 'TRANSPOSE_BEC' equal to {value}")
 
     tools.set_default_dtype(args.default_dtype)
     device = tools.init_device(args.device)
@@ -409,9 +430,7 @@ def run(args) -> None:
                 f"Total number of configurations in pretraining: train={len(head_config_pt.collections.train)}, valid={len(head_config_pt.collections.valid)}"
             )
         else:
-            logging.debug(
-                "Using LMDB/HDF5 datasets for pretraining or fine-tuning - skipping ratio check"
-            )
+            raise ValueError("LMDB/HDF5 datasets not supported")
 
     # Atomic number table
     # yapf: disable
@@ -553,7 +572,7 @@ def run(args) -> None:
         args.compute_polarizability = True
     else:
         dipole_only = False
-        if args.model == "EnergyDipolesMACE":
+        if args.model == "EnergyDipoleMACE":
             args.compute_dipole = True
             args.compute_energy = True
             args.compute_forces = True
@@ -1103,7 +1122,8 @@ def run(args) -> None:
                         _extra_files=extra_files,
                     )
                 except Exception as e:  # pylint: disable=W0718
-                    pass
+                    logging.error(f"Model compilation failed: {e}")
+                    traceback.print_exc()
             else:
                 torch.save(model_to_save, Path(args.model_dir) / (args.name + ".model"))
                 try:
@@ -1118,7 +1138,8 @@ def run(args) -> None:
                         _extra_files=extra_files,
                     )
                 except Exception as e:  # pylint: disable=W0718
-                    pass
+                    logging.error(f"Model compilation failed: {e}")
+                    traceback.print_exc()
 
         logging.info("Computing metrics for training, validation, and test sets")
         for param in model.parameters():
