@@ -280,14 +280,13 @@ def create_error_table(
                 f"{metrics['rmse_stress'] * 1000:8.3f}",
             ]
             if "mu" in table_type:
-                rows.append(
-                    [
-                        f"{metrics['rmse_mu_per_atom'] * 1000:8.3f}",
-                        f"{metrics['rel_rmse_mu']:8.3f}",
-                    ]
-                )
+                rows += [
+                    f"{metrics['rmse_mu_per_atom'] * 1000:8.3f}",
+                    f"{metrics['rel_rmse_mu']:8.3f}",
+                ]
+
             if "bec" in table_type:
-                rows.append([f"{metrics['rmse_bec'] * 1000:8.3f}"])
+                rows += [f"{metrics['rmse_bec'] * 1000:8.3f}"]
             table.add_row(rows)
 
     return table
