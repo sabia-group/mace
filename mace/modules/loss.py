@@ -191,7 +191,7 @@ def mean_squared_error_bec(
     if "bec" not in pred:
         raise ValueError(
             "Predictions do not contain 'bec' key required for BEC loss."
-            + "Please add --compute_bec True to your config.yml file."
+            + "Please add --compute_bec true to your config.yml file."
         )
     # Repeat per-graph weights to per-atom level.
     configs_weight = torch.repeat_interleave(
@@ -459,6 +459,7 @@ class PESDielectricLoss(torch.nn.Module):
             + f"stress_weight={self.stress_weight:.2e}, "
             + f"virials_weight={self.virials_weight:.2e},"
             + f"dipole_weight={self.dipole_weight:.2e},"
+            + f"bec_weight={self.bec_weight:.2e},"
             + f"polarizability_weight={self.polarizability_weight:.2e})"
         )
 

@@ -32,20 +32,20 @@ def configure_model(
         "general",
     )
 
-    if args.error_table == "StressDipoleRMSE":
-        assert (
-            not compute_virials
-        ), f"virials are not supported with error table {args.error_table}"
-        assert (
-            compute_stress
-        ), f"compute_stress must be true with error table {args.error_table}"
-    else:
-        if compute_virials:
-            args.compute_virials = True
-            args.error_table = "PerAtomRMSEstressvirials"
-        elif compute_stress:
-            args.compute_stress = True
-            args.error_table = "PerAtomRMSEstressvirials"
+    # if args.error_table == "pes+mu":
+    #     assert (
+    #         not compute_virials
+    #     ), f"virials are not supported with error table {args.error_table}"
+    #     assert (
+    #         compute_stress
+    #     ), f"compute_stress must be true with error table {args.error_table}"
+    # else:
+    #     if compute_virials:
+    #         args.compute_virials = True
+    #         args.error_table = "PerAtomRMSEstressvirials"
+    #     elif compute_stress:
+    #         args.compute_stress = True
+    #         args.error_table = "PerAtomRMSEstressvirials"
 
     output_args = {
         "energy": args.compute_energy,
@@ -370,15 +370,15 @@ def _build_model(
             MLP_irreps=o3.Irreps(args.MLP_irreps),
         )
     if args.model == "EnergyDipoleMACE":
-        assert args.loss in [
-            "energy_forces_dipole",
-            "pes+dipole",
-            "general",
-        ], "Use 'energy_forces_dipole', 'pes+dipole', or 'general' loss with EnergyDipoleMACE model"
-        assert args.error_table in [
-            "EnergyDipoleRMSE",
-            "StressDipoleRMSE",
-        ], f"Use error_table EnergyDipoleRMSE or StressDipoleRMSE  with EnergyDipoleMACE model (provided error table is {args.error_table })"
+        # assert args.loss in [
+        #     "energy_forces_dipole",
+        #     "pes+dipole",
+        # ], "Use energy_forces_dipole or pes+dipole loss with EnergyDipoleMACE model"
+        # assert args.error_table in [
+        #     "EnergyDipoleRMSE",
+        #     "pes+mu",
+        #     "PerAtomRMSEstressvirials"
+        # ], f"Use error_table EnergyDipoleRMSE or pes+mu  with EnergyDipoleMACE model (provided error table is {args.error_table })"
         return modules.EnergyDipoleMACE(
             **model_config,
             correlation=args.correlation,

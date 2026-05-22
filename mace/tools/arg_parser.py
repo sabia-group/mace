@@ -125,7 +125,9 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
             "DipoleMAE",
             "DipolePolarRMSE",
             "EnergyDipoleRMSE",
-            "StressDipoleRMSE",
+            "pes+mu",
+            "pes+mu+bec",
+            "pes+bec",
         ],
         default="PerAtomRMSE",
     )
@@ -1128,6 +1130,12 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--use_pbc_dipole",
         help="Use a periodic loss for the dipole (available only if all structures are periodic)",
+        action="store_true",
+        default=False,
+    )
+    parser.add_argument(
+        "--transpose_bec",
+        help="Transpose the Born Effective charges in the datasets.",
         action="store_true",
         default=False,
     )
