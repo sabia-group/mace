@@ -24,7 +24,13 @@ def configure_model(
 ):
     # Selecting outputs
     compute_virials = args.loss == "virials"
-    compute_stress = args.loss in ("stress", "huber", "universal", "pes+dipole")
+    compute_stress = args.loss in (
+        "stress",
+        "huber",
+        "universal",
+        "pes+dipole",
+        "general",
+    )
 
     # if args.error_table == "pes+mu":
     #     assert (

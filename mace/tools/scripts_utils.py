@@ -733,6 +733,15 @@ def get_loss_fn(
             dipole_weight=args.dipole_weight,
             bec_weight=args.bec_weight,
         )
+    elif args.loss == "general":
+        loss_fn = modules.PESDielectricLoss(
+            energy_weight=args.energy_weight,
+            forces_weight=args.forces_weight,
+            stress_weight=args.stress_weight,
+            dipole_weight=args.dipole_weight,
+            bec_weight=args.bec_weight,
+            polarizability_weight=args.polarizability_weight,
+        )
     else:
         loss_fn = modules.PESDielectricLoss(energy_weight=1.0, forces_weight=1.0)
     return loss_fn
@@ -830,6 +839,25 @@ def get_swa(
         )
         logging.info(
             f"Stage Two (after {args.start_swa} epochs) with loss function: {loss_fn_energy}, energy weight : {args.swa_energy_weight}, forces weight : {args.swa_forces_weight}, stress weight : {args.swa_stress_weight}, dipole weight : {args.swa_dipole_weight} and learning rate : {args.swa_lr}"
+        )
+    elif args.loss == "general":
+        loss_fn_energy = modules.PESDielectricLoss(
+            energy_weight=args.swa_energy_weight,
+            forces_weight=args.swa_forces_weight,
+            stress_weight=args.swa_stress_weight,
+            dipole_weight=args.swa_dipole_weight,
+            bec_weight=args.swa_bec_weight,
+            polarizability_weight=args.swa_polarizability_weight,
+        )
+        logging.info(
+            f"Stage Two (after {args.start_swa} epochs) with loss function: "
+            f"{loss_fn_energy} "
+            # f"energy weight: {args.swa_energy_weight}, "
+            # f"forces weight: {args.swa_forces_weight}, "
+            # f"stress weight: {args.swa_stress_weight}, "
+            # f"dipole weight: {args.swa_dipole_weight}, "
+            # f"polarizability weight: {args.swa_polarizability_weight} "
+            f"and learning rate: {args.swa_lr}"
         )
     else:
         raise ValueError(

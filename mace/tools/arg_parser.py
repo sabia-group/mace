@@ -774,6 +774,7 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         help="type of loss",
         default="weighted",
         choices=[
+            "general",
             "pes",
             "pes+dipole",
             "weighted",
