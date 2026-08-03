@@ -69,6 +69,90 @@ class OEQConfig:
             self.enabled = False
 
 
+def _irreps_layout_permutation(
+    irreps: o3.Irreps,
+    source: str,
+    target: str,
+) -> torch.Tensor:
+    """Return indices that reorder flattened irreps between cueq layouts."""
+    if source == target:
+        return torch.arange(irreps.dim)
+    if source not in ("mul_ir", "ir_mul"):
+        raise ValueError("Unsupported source irreps layout")
+    if target not in ("mul_ir", "ir_mul"):
+        raise ValueError("Unsupported target irreps layout")
+
+    blocks = []
+    for (mul, irrep), irrep_slice in zip(irreps, irreps.slices()):
+        block = torch.arange(irrep_slice.start, irrep_slice.stop)
+        if source == "mul_ir":
+            block = block.view(mul, irrep.dim).transpose(0, 1)
+        else:
+            block = block.view(irrep.dim, mul).transpose(0, 1)
+        blocks.append(block.flatten())
+    return torch.cat(blocks)
+
+
+class LayoutAwareE3Linear(o3.Linear):
+    """e3nn linear with the flattened layout interface used by cuet layers.
+
+    cuEquivariance's FX backend cannot construct a linear descriptor with an
+    output irrep that has no input path. e3nn represents those outputs as
+    zeros, so use it for only that case while preserving the cueq layout.
+    """
+
+    def __init__(
+        self,
+        irreps_in: o3.Irreps,
+        irreps_out: o3.Irreps,
+        *,
+        layout: str,
+        shared_weights: bool,
+        internal_weights: bool,
+    ) -> None:
+        super().__init__(
+            irreps_in,
+            irreps_out,
+            shared_weights=shared_weights,
+            internal_weights=internal_weights,
+        )
+        self.layout = layout
+        self.register_buffer(
+            "_input_to_mul_ir",
+            _irreps_layout_permutation(self.irreps_in, layout, "mul_ir"),
+            persistent=False,
+        )
+        self.register_buffer(
+            "_output_from_mul_ir",
+            _irreps_layout_permutation(self.irreps_out, "mul_ir", layout),
+            persistent=False,
+        )
+
+    def forward(
+        self,
+        features: torch.Tensor,
+        weight: Optional[torch.Tensor] = None,
+        bias: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        features = features.index_select(-1, self._input_to_mul_ir)
+        if weight is None:
+            weight = self.weight
+        if self.weight_numel > 0 and weight is None:
+            raise RuntimeError("Weights must be provided when internal_weights=False")
+        if bias is None:
+            bias = self.bias
+        if self.bias_numel > 0 and bias is None:
+            raise RuntimeError("Biases must be provided when internal_weights=False")
+        features = self._compiled_main(features, weight, bias)
+        return features.index_select(-1, self._output_from_mul_ir)
+
+
+def _linear_has_empty_paths(irreps_in: o3.Irreps, irreps_out: o3.Irreps) -> bool:
+    """Whether an e3nn linear has an output irrep that must be zero."""
+    input_irreps = {irrep for _, irrep in o3.Irreps(irreps_in)}
+    return any(irrep not in input_irreps for _, irrep in o3.Irreps(irreps_out))
+
+
 class Linear:
     """Returns either a cuet.Linear or o3.Linear based on config"""
 
@@ -86,6 +170,17 @@ class Linear:
             and cueq_config.enabled
             and (cueq_config.optimize_all or cueq_config.optimize_linear)
         ):
+            # cuet cannot lower an empty output branch (for example 0e ->
+            # 1o) through its FX implementation. Polar's scalar-only model
+            # contains these branches.
+            if _linear_has_empty_paths(irreps_in, irreps_out):
+                return LayoutAwareE3Linear(
+                    irreps_in,
+                    irreps_out,
+                    layout=cueq_config.layout_str,
+                    shared_weights=shared_weights,
+                    internal_weights=internal_weights,
+                )
             return cuet.Linear(
                 cue.Irreps(cueq_config.group, irreps_in),
                 cue.Irreps(cueq_config.group, irreps_out),

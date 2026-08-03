@@ -81,6 +81,11 @@ def transfer_symmetric_contractions(
     )
     suffixes = ["_max"] + [f".{i}" for i in range(correlation - 1)]
     for i, kmax in kmax_pairs:
+        target_weight_key = f"products.{i}.symmetric_contractions.weight"
+        # e3nn fallbacks retain the source module's nested state-dict layout;
+        # their weights are transferred with the remaining matching keys.
+        if target_weight_key not in target_dict:
+            continue
         irreps_in = o3.Irreps(
             irrep.ir for irrep in products[i].symmetric_contractions.irreps_in
         )
@@ -121,7 +126,7 @@ def transfer_symmetric_contractions(
             )
             proj = torch.tensor(proj, dtype=wm.dtype, device=wm.device)
             wm = torch.einsum("zau,ab->zbu", wm, proj)
-        target_dict[f"products.{i}.symmetric_contractions.weight"] = wm
+        target_dict[target_weight_key] = wm
 
 
 def transfer_weights(
@@ -151,11 +156,7 @@ def transfer_weights(
         keep_last_layer_irreps,
     )
 
-    transferred_keys = set()
-    remaining_keys = (
-        set(source_dict.keys()) & set(target_dict.keys()) - transferred_keys
-    )
-    remaining_keys = {k for k in remaining_keys if "symmetric_contraction" not in k}
+    remaining_keys = set(source_dict.keys()) & set(target_dict.keys())
     if remaining_keys:
         for key in remaining_keys:
             src = source_dict[key]
