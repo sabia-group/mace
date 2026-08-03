@@ -939,9 +939,9 @@ class PolarMACE(ScaleShiftMACE):
         if hasattr(self, "dipole_readout"):
             atomic_dipoles = self.dipole_readout(node_feats)
         else:
-            atomic_dipoles = torch.zeros_like(positions)
+            atomic_dipoles = torch.zeros_like(data["positions"])
         total_node_dipoles, atomic_oxn_dipole = get_dipole_outputs(
-            atomic_dipoles, data["oxn"], positions
+            atomic_dipoles, data["oxn"], data["positions"]
         )
         total_dipole = scatter_sum(
             src=total_node_dipoles,
@@ -1001,7 +1001,7 @@ class PolarMACE(ScaleShiftMACE):
             # [atom, position component, dipole component], as expected by ASE.
             bec = compute_dielectric_gradients_loop(
                 dielectric=total_dipole,
-                inputs=[positions],
+                inputs=[data["positions"]],
                 clean=not training,
                 training=training,
             )[0].moveaxis(0, 2)

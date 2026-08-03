@@ -477,6 +477,60 @@ def test_polar_dipole_uses_local_and_topological_terms(dtype):
     assert not torch.allclose(output["charge_dipole"].squeeze(0), expected_dipole)
 
 
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+def test_polar_topological_dipole_uses_displaced_positions(dtype):
+    """Oxidation-number dipoles must remain connected to strain autodiff."""
+    device = torch.device("cpu")
+    torch.manual_seed(0)
+    model = _build_minimal_model(device, dtype)
+    data_batch = _build_minimal_batch(device, dtype)
+    data_batch["unit_shifts"] = torch.zeros_like(data_batch["shifts"])
+    data_batch["external_field"] = torch.tensor(
+        [[0.3, -0.2, 0.1]], dtype=dtype, device=device
+    )
+
+    oxidation_numbers = torch.tensor([2.0, -2.0], dtype=dtype, device=device)
+    data_batch["oxn"] = oxidation_numbers
+    data_without_oxn = {
+        key: value.clone() if isinstance(value, torch.Tensor) else value
+        for key, value in data_batch.items()
+    }
+    data_without_oxn["oxn"].zero_()
+    output = model(
+        data_batch,
+        training=False,
+        compute_force=False,
+        compute_stress=True,
+        compute_bec=True,
+    )
+    output_without_oxn = model(
+        data_without_oxn,
+        training=False,
+        compute_force=False,
+        compute_stress=True,
+        compute_bec=True,
+    )
+
+    topological_dipole = torch.sum(
+        data_batch["positions"] * oxidation_numbers.unsqueeze(-1), dim=0
+    )
+    field = data_batch["external_field"].squeeze(0)
+    volume = torch.linalg.det(data_batch["cell"].view(3, 3)).abs()
+    expected_stress = 0.5 * (
+        torch.outer(topological_dipole, field)
+        + torch.outer(field, topological_dipole)
+    ) / volume
+    expected_bec = torch.stack(
+        [2.0 * torch.eye(3, dtype=dtype), -2.0 * torch.eye(3, dtype=dtype)]
+    )
+
+    assert torch.allclose(output["bec"] - output_without_oxn["bec"], expected_bec)
+    assert torch.allclose(
+        (output["stress"] - output_without_oxn["stress"]).squeeze(0),
+        expected_stress,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Checkpoint evaluation
 # ---------------------------------------------------------------------------
