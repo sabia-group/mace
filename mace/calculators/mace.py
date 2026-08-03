@@ -143,11 +143,17 @@ class MACECalculator(Calculator):
             }
         if arrays_keys is None:
             arrays_keys = {}
+        if model_type in ["EnergyDipoleMACE", "PolarMACE"]:
+            # The multi-valued dipole needs the formal oxidation numbers carried
+            # by extxyz as a per-atom array.  Missing arrays are represented by
+            # zeros by AtomicData, preserving ordinary non-topological usage.
+            arrays_keys.setdefault("oxn", "oxn")
         self.info_keys = info_keys
         self.arrays_keys = arrays_keys
 
         self.model_type = model_type
         self.compute_atomic_stresses = False
+        self.compute_bec = bool(kwargs.get("compute_bec", False))
 
         if model_type not in [
             "MACE",
@@ -175,7 +181,12 @@ class MACECalculator(Calculator):
             if kwargs.get("compute_atomic_stresses", False):
                 self.implemented_properties.extend(["stresses", "virials"])
                 self.compute_atomic_stresses = True
-        if model_type in ["EnergyDipoleMACE", "DipoleMACE", "DipolePolarizabilityMACE"]:
+        if model_type in [
+            "EnergyDipoleMACE",
+            "DipoleMACE",
+            "DipolePolarizabilityMACE",
+            "PolarMACE",
+        ]:
             self.implemented_properties.extend(["dipole"])
         if model_type == "DipolePolarizabilityMACE":
             self.implemented_properties.extend(
@@ -374,6 +385,9 @@ class MACECalculator(Calculator):
             "atomic_stresses": [num_atoms, 3, 3],
             "atomic_virials": [num_atoms, 3, 3],
             "dipole": [3],
+            "atomic_dipoles": [num_atoms, 3],
+            "atomic-oxn-dipole": [num_atoms, 3],
+            "bec": [num_atoms, 3, 3],
             "charges": [num_atoms],
             "polarizability": [3, 3],
             "polarizability_sh": [6],
@@ -470,13 +484,15 @@ class MACECalculator(Calculator):
                 value = batch[key]
                 if torch.is_tensor(value) and torch.is_floating_point(value):
                     batch[key] = value.to(dtype=model_dtype)
-            out = model(
-                batch.to_dict(),
-                compute_stress=compute_stress,
-                training=self.use_compile,
-                compute_edge_forces=self.compute_atomic_stresses,
-                compute_atomic_stresses=self.compute_atomic_stresses,
-            )
+            model_kwargs = {
+                "compute_stress": compute_stress,
+                "training": self.use_compile,
+                "compute_edge_forces": self.compute_atomic_stresses,
+                "compute_atomic_stresses": self.compute_atomic_stresses,
+            }
+            if self.model_type in ["EnergyDipoleMACE", "PolarMACE"]:
+                model_kwargs["compute_bec"] = self.compute_bec
+            out = model(batch.to_dict(), **model_kwargs)
             if i == 0:
                 ret_tensors, node_e0 = self._create_result_tensors(
                     self.num_models, len(atoms), batch, out
@@ -505,6 +521,9 @@ class MACECalculator(Calculator):
                 self.energy_units_to_eV / self.length_units_to_A**3,
             ),
             ("dipole", "dipole", 1.0),
+            ("atomic_dipoles", "atomic_dipoles", 1.0),
+            ("atomic-oxn-dipole", "atomic-oxn-dipole", 1.0),
+            ("bec", "bec", 1.0),
             ("charges", "charges", 1.0),
             ("polarizability", "polarizability", 1.0),
             ("polarizability_sh", "polarizability_sh", 1.0),

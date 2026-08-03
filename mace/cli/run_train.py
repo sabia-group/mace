@@ -579,7 +579,10 @@ def run(args) -> None:
             args.compute_virials = False
             args.compute_stress = False
             args.compute_polarizability = False
-        elif args.model == "PolarMACE" and args.loss == "energy_forces_dipole":
+        elif args.model == "PolarMACE" and args.loss in (
+            "energy_forces_dipole",
+            "pes+dipole",
+        ):
             args.compute_dipole = True
             args.compute_energy = True
             args.compute_forces = True

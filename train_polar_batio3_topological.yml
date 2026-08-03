@@ -1,0 +1,53 @@
+# Fine-tune MACE-POLAR-1 on the BaTiO3 dataset with the multi-valued dipole
+# defined as sum_i(mu_i^local + oxn_i * R_i). The learned MACE-POLAR charges
+# remain in the electrostatic energy but are intentionally excluded from dipole.
+name: BaTiO3-polar-1-m-topological
+model: PolarMACE
+foundation_model: polar-1-m
+
+train_file: /home/stoccoel/Documents/PIEZO/BaTiO3-clean/iter-3/data/train.extxyz
+valid_file: /home/stoccoel/Documents/PIEZO/BaTiO3-clean/iter-3/data/validation.extxyz
+test_file: /home/stoccoel/Documents/PIEZO/BaTiO3-clean/iter-3/data/test.extxyz
+
+energy_key: REF_energy
+forces_key: REF_forces
+stress_key: REF_stress
+dipole_key: REF_dipole
+bec_key: REF_BEC
+oxn_key: oxn
+
+E0s: average
+loss: pes+dipole
+error_table: pes+mu+bec
+compute_bec: true
+transpose_bec: false
+
+energy_weight: 1.0
+forces_weight: 100.0
+stress_weight: 10.0
+dipole_weight: 1.0
+bec_weight: 100.0
+
+batch_size: 8
+valid_batch_size: 8
+max_num_epochs: 1000
+patience: 50
+lr: 0.0001
+ema: true
+ema_decay: 0.9
+amsgrad: true
+swa: true
+swa_energy_weight: 100.0
+swa_forces_weight: 1.0
+swa_stress_weight: 10.0
+swa_dipole_weight: 100.0
+swa_bec_weight: 1.0
+
+seed: 12345
+default_dtype: float64
+device: cuda
+save_cpu: true
+model_dir: models/batio3-polar-topological
+log_dir: logs/batio3-polar-topological
+checkpoints_dir: checkpoints/batio3-polar-topological
+results_dir: results/batio3-polar-topological

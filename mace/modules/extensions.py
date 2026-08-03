@@ -18,12 +18,19 @@ except (ImportError, ModuleNotFoundError):
     GRAPH_LONGRANGE_AVAILABLE = False
 
 from mace.modules.blocks import (
+    LinearDipoleReadoutBlock,
     LinearReadoutBlock,
     NonLinearBiasReadoutBlock,
     NonLinearReadoutBlock,
 )
 from mace.modules.models import ScaleShiftMACE
-from mace.modules.utils import get_atomic_virials_stresses, get_outputs, prepare_graph
+from mace.modules.utils import (
+    compute_dielectric_gradients_loop,
+    get_atomic_virials_stresses,
+    get_dipole_outputs,
+    get_outputs,
+    prepare_graph,
+)
 from mace.modules.wrapper_ops import (
     CuEquivarianceConfig,
     OEQConfig,
@@ -589,6 +596,20 @@ class PolarMACE(ScaleShiftMACE):
             cueq_config=cueq_config,
         )
 
+        # The charge density is deliberately not used to construct the physical
+        # dipole.  It remains the source of the long-range electrostatic energy,
+        # but its point-charge dipole is not a suitable multi-valued dipole in a
+        # periodic material.  The local equivariant contribution below is paired
+        # with the formal-oxidation-number term in ``forward``.
+        self.dipole_readout = LinearDipoleReadoutBlock(
+            hidden_irreps, dipole_only=True, cueq_config=cueq_config
+        )
+        # MACE-POLAR-1 checkpoints predate this readout.  Starting the newly
+        # added head at zero preserves their energy/electrostatic predictions and
+        # starts dipole fine-tuning from the exactly topological contribution.
+        with torch.no_grad():
+            self.dipole_readout.linear.weight.zero_()
+
     def forward(
         self,
         data: Dict[str, torch.Tensor],
@@ -604,6 +625,7 @@ class PolarMACE(ScaleShiftMACE):
         use_pbc_evaluator: bool = False,
         fermi_level: Optional[torch.Tensor] = None,
         external_field: Optional[torch.Tensor] = None,
+        compute_bec: bool = False,
     ) -> Dict[str, Optional[torch.Tensor]]:
         if not GRAPH_LONGRANGE_AVAILABLE:
             raise ImportError(
@@ -907,8 +929,25 @@ class PolarMACE(ScaleShiftMACE):
             if charges_to_mul_ir is not None
             else spin_charge_density
         )
-        total_charge, total_dipole = compute_total_charge_dipole_permuted(
+        total_charge, charge_dipole = compute_total_charge_dipole_permuted(
             charge_density_mul_ir, positions, data["batch"], num_graphs
+        )
+
+        # ``dipole_readout`` is absent on serialized MACE-POLAR-1 checkpoints
+        # made before this change.  Keeping this fallback makes those checkpoints
+        # loadable; a fine-tuned model receives the new, trainable readout above.
+        if hasattr(self, "dipole_readout"):
+            atomic_dipoles = self.dipole_readout(node_feats)
+        else:
+            atomic_dipoles = torch.zeros_like(positions)
+        total_node_dipoles, atomic_oxn_dipole = get_dipole_outputs(
+            atomic_dipoles, data["oxn"], positions
+        )
+        total_dipole = scatter_sum(
+            src=total_node_dipoles,
+            index=data["batch"],
+            dim=0,
+            dim_size=num_graphs,
         )
         electro_energy = self.coulomb_energy(
             k_vectors=k_vectors,
@@ -934,7 +973,7 @@ class PolarMACE(ScaleShiftMACE):
             displacement=displacement,
             vectors=vectors,
             cell=cell,
-            training=training,
+            training=training or compute_bec,
             compute_force=compute_force,
             compute_virials=compute_virials,
             compute_stress=compute_stress,
@@ -955,6 +994,17 @@ class PolarMACE(ScaleShiftMACE):
                 batch=data["batch"],
                 cell=cell,
             )
+
+        bec: Optional[torch.Tensor] = None
+        if compute_bec:
+            # [dipole component, atom, position component] ->
+            # [atom, position component, dipole component], as expected by ASE.
+            bec = compute_dielectric_gradients_loop(
+                dielectric=total_dipole,
+                inputs=[positions],
+                clean=not training,
+                training=training,
+            )[0].moveaxis(0, 2)
 
         return {
             "energy": total_energy,
@@ -979,6 +1029,10 @@ class PolarMACE(ScaleShiftMACE):
             "charges": charge_density_mul_ir[:, 0],
             "spins": spin_density_mul_ir[:, 0],
             "dipole": total_dipole,
+            "atomic_dipoles": atomic_dipoles,
+            "atomic-oxn-dipole": atomic_oxn_dipole,
+            "charge_dipole": charge_dipole,
+            "bec": bec,
             "total_charge": total_charge,
             "electrostatic_energy": electro_energy,
             "electron_energy": le_total,

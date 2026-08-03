@@ -319,6 +319,7 @@ def _build_minimal_batch(device, dtype):
         "total_charge": total_charge,
         "total_spin": total_spin,
         "density_coefficients": torch.zeros((n, 1), dtype=dtype, device=device),
+        "oxn": torch.zeros(n, dtype=dtype, device=device),
     }
     return data_batch
 
@@ -401,6 +402,7 @@ def _build_water_batch(device, dtype):
         "total_charge": torch.zeros((1,), dtype=dtype, device=device),
         "total_spin": torch.zeros((1,), dtype=dtype, device=device),
         "density_coefficients": torch.zeros((n, 1), dtype=dtype, device=device),
+        "oxn": torch.zeros(n, dtype=dtype, device=device),
     }
     return data_batch
 
@@ -444,6 +446,35 @@ def test_energy_invariance_under_rotation_and_translation(dtype):
     E_tr = out_tr["energy"].detach()
 
     assert torch.allclose(E, E_tr, atol=5e-3, rtol=1e-5)
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+def test_polar_dipole_uses_local_and_topological_terms(dtype):
+    """Charge density remains electrostatic-only; dipoles use formal charges."""
+    device = torch.device("cpu")
+    torch.manual_seed(0)
+    model = _build_minimal_model(device, dtype)
+    data_batch = _build_minimal_batch(device, dtype)
+    data_batch["oxn"] = torch.tensor([2.0, -2.0], dtype=dtype, device=device)
+
+    output = model(
+        data_batch, training=False, compute_force=False, compute_bec=True
+    )
+    expected_dipole = torch.sum(
+        data_batch["positions"] * data_batch["oxn"].unsqueeze(-1), dim=0
+    )
+    expected_bec = torch.stack(
+        [2.0 * torch.eye(3, dtype=dtype), -2.0 * torch.eye(3, dtype=dtype)]
+    )
+
+    # Newly added local readouts start at zero; this exact equality also proves
+    # that the nonzero learned charge density is absent from ``dipole``.
+    assert torch.allclose(output["dipole"].squeeze(0), expected_dipole)
+    assert torch.allclose(
+        output["atomic_dipoles"], torch.zeros_like(data_batch["positions"])
+    )
+    assert torch.allclose(output["bec"], expected_bec)
+    assert not torch.allclose(output["charge_dipole"].squeeze(0), expected_dipole)
 
 
 # ---------------------------------------------------------------------------

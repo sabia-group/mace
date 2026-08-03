@@ -294,6 +294,10 @@ def load_foundations_elements(
     for attr_name, module in model.named_children():
         if attr_name in _handled_attrs:
             continue
+        # New optional heads (for example the topological PolarMACE dipole
+        # readout) have no counterpart in older foundation checkpoints.
+        if attr_name not in model_foundations.__dict__["_modules"]:
+            continue
         submodules = (
             list(zip(module, model_foundations.__dict__["_modules"][attr_name]))
             if isinstance(module, torch.nn.ModuleList)

@@ -22,6 +22,7 @@ ase_like_properties = {
     "dipole": (3,),
     "atomic_dipoles": ("natoms", 3),
     "atomic-oxn-dipole": ("natoms", 3),
+    "bec": ("natoms", 3, 3),
 }
 
 
@@ -104,8 +105,18 @@ def run(args: argparse.Namespace) -> None:
 
     # Load model
     model = torch.load(f=args.model, map_location=args.device)
-    if model.__class__.__name__ != "MACELES" and args.compute_bec:
-        raise ValueError("BEC can only be computed with MACELES model. ")
+    if (
+        model.__class__.__name__
+        not in (
+            "MACELES",
+            "EnergyDipoleMACE",
+            "PolarMACE",
+        )
+        and args.compute_bec
+    ):
+        raise ValueError(
+            "BEC can only be computed with MACELES, EnergyDipoleMACE, or PolarMACE."
+        )
     if args.enable_cueq:
         print("Converting models to CuEq for acceleration")
         model = run_e3nn_to_cueq(model, device=device)
