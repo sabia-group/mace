@@ -45,6 +45,9 @@ def write_extxyz_test(tmp_path, atoms):
             "forces_var",
             "forces_comm",
             "virials",
+            "atomic_dipoles",
+            "atomic-oxn-dipole",
+            "bec",
         ]
     )
     # everything that we expect has been written
