@@ -147,6 +147,7 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
             "AtomicDipolesMACE",
             "AtomicDielectricMACE",
             "EnergyDipoleMACE",
+            "LREnergyDipoleMACE",
         ],
     )
     parser.add_argument(
@@ -723,7 +724,7 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--compute_bec",
         help="compute BEC",
-        # action="store_true",
+        type=str2bool,
         default=None,
     )
     parser.add_argument(
