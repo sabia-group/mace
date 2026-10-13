@@ -156,7 +156,8 @@ def plot(
         "rmse_stress": "RMSE Stress [meV / A^3]",
         "rmse_virials_per_atom": " RMSE virials/atom [meV]",
         "mae_virials": "MAE Virials [meV]",
-        "rmse_mu_per_atom": "RMSE MU/atom [mDebye]",
+        "rmse_mu_per_atom": "RMSE MU/atom [e*ang]",
+        "rmse_bec": "RMSE Z [e]",
     }
 
     data = data[data["epoch"] > min_epoch]
@@ -292,7 +293,7 @@ def plot(
             )
 
         ax.set_xlabel("Epoch")
-        ax.set_xlim(left=min_epoch)
+        ax.set_xlim(0, min(int(train_data["epoch"] * 1.2), min_epoch))
         ax.grid(True, linestyle="--", alpha=0.5)
 
         fig.savefig(

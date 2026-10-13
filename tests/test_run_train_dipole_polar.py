@@ -20,8 +20,18 @@ except ImportError:
 run_train = Path(__file__).parent.parent / "mace" / "cli" / "run_train.py"
 
 
+# ----------------------------- #
 @pytest.fixture(name="fitting_configs")
 def fixture_fitting_configs():
+    return _fitting_config(False)
+
+
+@pytest.fixture(name="fitting_configs_nan")
+def fixture_fitting_configs_nan():
+    return _fitting_config(True)
+
+
+def _fitting_config(with_nan=False):
     water = Atoms(
         numbers=[8, 1, 1],
         positions=[[0, -2.0, 0], [1, 0, 0], [0, 1, 0]],
@@ -37,6 +47,17 @@ def fixture_fitting_configs():
     fit_configs[1].info["REF_energy"] = 0.0
     fit_configs[1].info["config_type"] = "IsolatedAtom"
 
+    if with_nan:
+        np.random.seed(0)
+        c = water.copy()
+        c.positions += np.random.normal(0.1, size=c.positions.shape)
+        c.info["REF_energy"] = np.nan
+        c.new_array("REF_forces", np.full(c.positions.shape, np.nan))
+        c.info["REF_stress"] = np.full(6, np.nan)
+        c.info["REF_dipoles"] = np.full(3, np.nan)
+        c.info["REF_polarizability"] = np.full((3, 3), np.nan)
+        fit_configs.append(c)
+
     np.random.seed(5)
     for _ in range(20):
         c = water.copy()
@@ -45,7 +66,7 @@ def fixture_fitting_configs():
         print(c.info["REF_energy"])
         c.new_array("REF_forces", np.random.normal(0.1, size=c.positions.shape))
         c.info["REF_stress"] = np.random.normal(0.1, size=6)
-        c.info["REF_dipoles"] = np.random.normal(0.1, size=3)
+        c.info["REF_dipoles"] = np.random.normal(0.1, size=(3))
         c.info["REF_polarizability"] = np.random.normal(0.1, size=(3, 3))
 
         fit_configs.append(c)
@@ -66,7 +87,7 @@ def fixture_pretraining_configs():
         atoms.info["REF_energy"] = np.random.normal(0, 1)
         atoms.arrays["REF_forces"] = np.random.normal(0, 1, size=(3, 3))
         atoms.info["REF_stress"] = np.random.normal(0, 1, size=6)
-        atoms.info["REF_dipoles"] = np.random.normal(0.1, size=3)
+        atoms.info["REF_dipoles"] = np.random.normal(0.1, size=(3))
         atoms.info["REF_polarizability"] = np.random.normal(0.1, size=(3, 3))
         configs.append(atoms)
     configs.append(
@@ -82,13 +103,14 @@ def fixture_pretraining_configs():
     return configs
 
 
+# ----------------------------- #
 _mace_params_dipole = {
     "name": "DipolesMACE",
     "valid_fraction": 0.05,
     "energy_weight": 1.0,
     "forces_weight": 10.0,
     "stress_weight": 1.0,
-    "dipole_weight": 1.0,
+    "dipole_weight": 100.0,
     "model": "AtomicDipolesMACE",
     "r_max": 3.5,
     "max_L": 1,
@@ -112,6 +134,14 @@ _mace_params_dipole = {
 
 
 def test_run_train_dipole(tmp_path, fitting_configs):
+    _run_train_dipole(tmp_path, fitting_configs, True)
+
+
+def test_run_train_dipole_nan(tmp_path, fitting_configs_nan):
+    _run_train_dipole(tmp_path, fitting_configs_nan, False)
+
+
+def _run_train_dipole(tmp_path, fitting_configs, compare):
     ase.io.write(tmp_path / "fit.xyz", fitting_configs)
 
     mace_params = _mace_params_dipole.copy()
@@ -152,6 +182,9 @@ def test_run_train_dipole(tmp_path, fitting_configs):
         at.calc = calc
         Mus.append(at.get_dipole_moment())
 
+    if not compare:
+        return
+
     print("Mus", Mus)
     # Obtained for MACE from the 08/08/2025
     ref_Mus = [
@@ -182,12 +215,13 @@ def test_run_train_dipole(tmp_path, fitting_configs):
     assert np.allclose(Mus, ref_Mus)
 
 
+# # ----------------------------- #
 _mace_params_dipole_polar = {
     "name": "DielectricMACE",
     "valid_fraction": 0.05,
-    "energy_weight": 1.0,
-    "forces_weight": 10.0,
-    "stress_weight": 1.0,
+    "energy_weight": 0.0,
+    "forces_weight": 0.0,
+    "stress_weight": 0.0,
     "dipole_weight": 1.0,
     "polarizability_weight": 1.0,
     "model": "AtomicDielectricMACE",
@@ -214,6 +248,14 @@ _mace_params_dipole_polar = {
 
 
 def test_run_train_dipole_polar(tmp_path, fitting_configs):
+    _run_train_dipole_polar(tmp_path, fitting_configs, True)
+
+
+def test_run_train_dipole_polar_nan(tmp_path, fitting_configs_nan):
+    _run_train_dipole_polar(tmp_path, fitting_configs_nan, False)
+
+
+def _run_train_dipole_polar(tmp_path, fitting_configs, compare):
     ase.io.write(tmp_path / "fit.xyz", fitting_configs)
 
     mace_params = _mace_params_dipole_polar.copy()
@@ -255,6 +297,10 @@ def test_run_train_dipole_polar(tmp_path, fitting_configs):
         at.calc = calc
         Mus.append(at.get_dipole_moment())
         alphas.append(calc.get_property("polarizability", at))
+
+    if not compare:
+        return
+
     # Obtained for MACE from the 08/08/2025
     ref_Mus = [
         np.array([0.0, 0.0, 0.0]),
@@ -428,3 +474,7 @@ def test_run_train_dipole_polar(tmp_path, fitting_configs):
 
     assert np.allclose(Mus, ref_Mus)
     assert np.allclose(alphas, ref_alphas)
+
+
+if __name__ == "__main__":
+    pytest.main([__file__])

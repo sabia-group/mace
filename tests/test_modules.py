@@ -8,9 +8,9 @@ from mace.data import AtomicData, Configuration
 from mace.modules import (
     AtomicEnergiesBlock,
     BesselBasis,
+    PESDielectricLoss,
     PolynomialCutoff,
     SymmetricContraction,
-    WeightedEnergyForcesLoss,
     WeightedHuberEnergyForcesStressLoss,
     compute_mean_rms_energy_forces,
     compute_statistics,
@@ -148,7 +148,7 @@ def _set_torch_default_dtype():
 
 
 def test_weighted_loss(config, table):
-    loss1 = WeightedEnergyForcesLoss(energy_weight=1, forces_weight=10)
+    loss1 = PESDielectricLoss(energy_weight=1, forces_weight=10)
     loss2 = WeightedHuberEnergyForcesStressLoss(energy_weight=1, forces_weight=10)
     data = AtomicData.from_config(config, z_table=table, cutoff=3.0)
     data_loader = torch_geometric.dataloader.DataLoader(

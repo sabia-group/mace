@@ -82,13 +82,13 @@ def create_error_table(
     elif table_type == "DipoleRMSE":
         table.field_names = [
             "config_type",
-            "RMSE MU / mDebye / atom",
+            "RMSE MU / me*ang / atom",
             "relative MU RMSE %",
         ]
     elif table_type == "DipoleMAE":
         table.field_names = [
             "config_type",
-            "MAE MU / mDebye / atom",
+            "MAE MU / me*ang / atom",
             "relative MU MAE %",
         ]
     elif table_type == "DipolePolarRMSE":
@@ -104,9 +104,21 @@ def create_error_table(
             "RMSE E / meV / atom",
             "RMSE F / meV / A",
             "rel F RMSE %",
-            "RMSE MU / mDebye / atom",
+            "RMSE MU / me*ang / atom",
             "rel MU RMSE %",
         ]
+    elif table_type in ["pes+mu", "pes+bec", "pes+mu+bec"]:
+        table.field_names = [
+            "config_type",
+            "RMSE E / meV / atom",
+            "RMSE F / meV / A",
+            "rel F RMSE %",
+            "RMSE Stress (Virials) / meV / A (A^3)",
+        ]
+        if "mu" in table_type:
+            table.field_names += ["RMSE MU / me*ang / atom", "rel MU RMSE %"]
+        if "bec" in table_type:
+            table.field_names += ["RMSE Z* / me"]
 
     for name in sorted(all_data_loaders, key=custom_key):
         if any(skip_head in name for skip_head in skip_heads):
@@ -139,18 +151,18 @@ def create_error_table(
             table.add_row(
                 [
                     name,
-                    f"{metrics['rmse_e'] * 1000:8.1f}",
-                    f"{metrics['rmse_f'] * 1000:8.1f}",
-                    f"{metrics['rel_rmse_f']:8.2f}",
+                    f"{metrics['rmse_e'] * 1000:8.3f}",
+                    f"{metrics['rmse_f'] * 1000:8.3f}",
+                    f"{metrics['rel_rmse_f']:8.3f}",
                 ]
             )
         elif table_type == "PerAtomRMSE":
             table.add_row(
                 [
                     name,
-                    f"{metrics['rmse_e_per_atom'] * 1000:8.1f}",
-                    f"{metrics['rmse_f'] * 1000:8.1f}",
-                    f"{metrics['rel_rmse_f']:8.2f}",
+                    f"{metrics['rmse_e_per_atom'] * 1000:8.3f}",
+                    f"{metrics['rmse_f'] * 1000:8.3f}",
+                    f"{metrics['rel_rmse_f']:8.3f}",
                 ]
             )
         elif (
@@ -160,10 +172,10 @@ def create_error_table(
             table.add_row(
                 [
                     name,
-                    f"{metrics['rmse_e_per_atom'] * 1000:8.1f}",
-                    f"{metrics['rmse_f'] * 1000:8.1f}",
-                    f"{metrics['rel_rmse_f']:8.2f}",
-                    f"{metrics['rmse_stress'] * 1000:8.1f}",
+                    f"{metrics['rmse_e_per_atom'] * 1000:8.3f}",
+                    f"{metrics['rmse_f'] * 1000:8.3f}",
+                    f"{metrics['rel_rmse_f']:8.3f}",
+                    f"{metrics['rmse_stress'] * 1000:8.3f}",
                 ]
             )
         elif (
@@ -173,10 +185,10 @@ def create_error_table(
             table.add_row(
                 [
                     name,
-                    f"{metrics['rmse_e_per_atom'] * 1000:8.1f}",
-                    f"{metrics['rmse_f'] * 1000:8.1f}",
-                    f"{metrics['rel_rmse_f']:8.2f}",
-                    f"{metrics['rmse_virials'] * 1000:8.1f}",
+                    f"{metrics['rmse_e_per_atom'] * 1000:8.3f}",
+                    f"{metrics['rmse_f'] * 1000:8.3f}",
+                    f"{metrics['rel_rmse_f']:8.3f}",
+                    f"{metrics['rmse_virials'] * 1000:8.3f}",
                 ]
             )
         elif (
@@ -186,10 +198,10 @@ def create_error_table(
             table.add_row(
                 [
                     name,
-                    f"{metrics['mae_e_per_atom'] * 1000:8.1f}",
-                    f"{metrics['mae_f'] * 1000:8.1f}",
-                    f"{metrics['rel_mae_f']:8.2f}",
-                    f"{metrics['mae_stress'] * 1000:8.1f}",
+                    f"{metrics['mae_e_per_atom'] * 1000:8.3f}",
+                    f"{metrics['mae_f'] * 1000:8.3f}",
+                    f"{metrics['rel_mae_f']:8.3f}",
+                    f"{metrics['mae_stress'] * 1000:8.3f}",
                 ]
             )
         elif (
@@ -199,44 +211,44 @@ def create_error_table(
             table.add_row(
                 [
                     name,
-                    f"{metrics['mae_e_per_atom'] * 1000:8.1f}",
-                    f"{metrics['mae_f'] * 1000:8.1f}",
-                    f"{metrics['rel_mae_f']:8.2f}",
-                    f"{metrics['mae_virials'] * 1000:8.1f}",
+                    f"{metrics['mae_e_per_atom'] * 1000:8.3f}",
+                    f"{metrics['mae_f'] * 1000:8.3f}",
+                    f"{metrics['rel_mae_f']:8.3f}",
+                    f"{metrics['mae_virials'] * 1000:8.3f}",
                 ]
             )
         elif table_type == "TotalMAE":
             table.add_row(
                 [
                     name,
-                    f"{metrics['mae_e'] * 1000:8.1f}",
-                    f"{metrics['mae_f'] * 1000:8.1f}",
-                    f"{metrics['rel_mae_f']:8.2f}",
+                    f"{metrics['mae_e'] * 1000:8.3f}",
+                    f"{metrics['mae_f'] * 1000:8.3f}",
+                    f"{metrics['rel_mae_f']:8.3f}",
                 ]
             )
         elif table_type == "PerAtomMAE":
             table.add_row(
                 [
                     name,
-                    f"{metrics['mae_e_per_atom'] * 1000:8.1f}",
-                    f"{metrics['mae_f'] * 1000:8.1f}",
-                    f"{metrics['rel_mae_f']:8.2f}",
+                    f"{metrics['mae_e_per_atom'] * 1000:8.3f}",
+                    f"{metrics['mae_f'] * 1000:8.3f}",
+                    f"{metrics['rel_mae_f']:8.3f}",
                 ]
             )
         elif table_type == "DipoleRMSE":
             table.add_row(
                 [
                     name,
-                    f"{metrics['rmse_mu_per_atom'] * 1000:8.2f}",
-                    f"{metrics['rel_rmse_mu']:8.1f}",
+                    f"{metrics['rmse_mu_per_atom'] * 1000:8.3f}",
+                    f"{metrics['rel_rmse_mu']:8.3f}",
                 ]
             )
         elif table_type == "DipoleMAE":
             table.add_row(
                 [
                     name,
-                    f"{metrics['mae_mu_per_atom'] * 1000:8.2f}",
-                    f"{metrics['rel_mae_mu']:8.1f}",
+                    f"{metrics['mae_mu_per_atom'] * 1000:8.3f}",
+                    f"{metrics['rel_mae_mu']:8.3f}",
                 ]
             )
         elif table_type == "DipolePolarRMSE":
@@ -252,11 +264,29 @@ def create_error_table(
             table.add_row(
                 [
                     name,
-                    f"{metrics['rmse_e_per_atom'] * 1000:8.1f}",
-                    f"{metrics['rmse_f'] * 1000:8.1f}",
-                    f"{metrics['rel_rmse_f']:8.1f}",
-                    f"{metrics['rmse_mu_per_atom'] * 1000:8.1f}",
-                    f"{metrics['rel_rmse_mu']:8.1f}",
+                    f"{metrics['rmse_e_per_atom'] * 1000:8.3f}",
+                    f"{metrics['rmse_f'] * 1000:8.3f}",
+                    f"{metrics['rel_rmse_f']:8.3f}",
+                    f"{metrics['rmse_mu_per_atom'] * 1000:8.3f}",
+                    f"{metrics['rel_rmse_mu']:8.3f}",
                 ]
             )
+        elif table_type in ["pes+mu", "pes+bec", "pes+mu+bec"]:
+            rows = [
+                name,
+                f"{metrics['rmse_e_per_atom'] * 1000:8.3f}",
+                f"{metrics['rmse_f'] * 1000:8.3f}",
+                f"{metrics['rel_rmse_f']:8.3f}",
+                f"{metrics['rmse_stress'] * 1000:8.3f}",
+            ]
+            if "mu" in table_type:
+                rows += [
+                    f"{metrics['rmse_mu_per_atom'] * 1000:8.3f}",
+                    f"{metrics['rel_rmse_mu']:8.3f}",
+                ]
+
+            if "bec" in table_type:
+                rows += [f"{metrics['rmse_bec'] * 1000:8.3f}"]
+            table.add_row(rows)
+
     return table
