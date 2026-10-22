@@ -327,5 +327,7 @@ def get_model_output(
     # not supported by all models
     if "bec" in output_args and output_args["bec"] is not None:
         kwargs["compute_bec"] = output_args["bec"]
+    if output_args.get("piezoelectric", False):
+        kwargs["compute_piezoelectric"] = True
 
     return model(batch.to_dict(), **kwargs)

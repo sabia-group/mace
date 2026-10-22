@@ -220,6 +220,30 @@ def mean_squared_error_bec(
 
 
 # ------------------------------------------------------------------------------
+# Piezoelectric Loss Functions
+# ------------------------------------------------------------------------------
+def weighted_mean_squared_error_piezoelectric(
+    ref: Batch, pred: TensorDict, ddp: Optional[bool] = None
+) -> torch.Tensor:
+    """Mean-square error for e[i, J] in Voigt order xx, yy, zz, yz, xz, xy."""
+    if "piezoelectric" not in pred:
+        raise ValueError(
+            "Predictions do not contain 'piezoelectric' required for piezoelectric "
+            "loss. Use the pes+dipole+piezo loss with an EnergyDipoleMACE model."
+        )
+    configs_weight = ref.weight.view(-1, 1, 1)
+    configs_piezoelectric_weight = ref.piezoelectric_weight.view(-1, 1, 1)
+    raw_loss = general_loss_with_nan(
+        configs_weight,
+        configs_piezoelectric_weight,
+        ref["piezoelectric"],
+        pred["piezoelectric"],
+        lambda x, a, i: torch.square(x),
+    )
+    return reduce_loss(raw_loss, ddp)
+
+
+# ------------------------------------------------------------------------------
 # Forces Loss Functions
 # ------------------------------------------------------------------------------
 
@@ -388,6 +412,7 @@ class PESDielectricLoss(torch.nn.Module):
         dipole_weight=0.0,
         bec_weight=0.0,
         polarizability_weight=0.0,
+        piezoelectric_weight=0.0,
     ) -> None:
         super().__init__()
         self.register_buffer(
@@ -417,6 +442,10 @@ class PESDielectricLoss(torch.nn.Module):
         self.register_buffer(
             "polarizability_weight",
             torch.tensor(polarizability_weight, dtype=torch.get_default_dtype()),
+        )
+        self.register_buffer(
+            "piezoelectric_weight",
+            torch.tensor(piezoelectric_weight, dtype=torch.get_default_dtype()),
         )
 
     def forward(
@@ -449,6 +478,12 @@ class PESDielectricLoss(torch.nn.Module):
                 + self.polarizability_weight
                 * weighted_mean_squared_error_polarizability(ref, pred, ddp)
             )
+        if self.piezoelectric_weight > 0.0:
+            loss = (
+                loss
+                + self.piezoelectric_weight
+                * weighted_mean_squared_error_piezoelectric(ref, pred, ddp)
+            )
         return loss
 
     def __repr__(self):
@@ -460,7 +495,8 @@ class PESDielectricLoss(torch.nn.Module):
             + f"virials_weight={self.virials_weight:.2e},"
             + f"dipole_weight={self.dipole_weight:.2e},"
             + f"bec_weight={self.bec_weight:.2e},"
-            + f"polarizability_weight={self.polarizability_weight:.2e})"
+            + f"polarizability_weight={self.polarizability_weight:.2e},"
+            + f"piezoelectric_weight={self.piezoelectric_weight:.2e})"
         )
 
 

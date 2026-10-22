@@ -169,6 +169,32 @@ def test_weighted_loss(config, table):
     assert out2 == 0.0
 
 
+def test_piezoelectric_loss_and_data_masking(table):
+    piezoelectric = np.arange(18, dtype=float).reshape(3, 6)
+    config = Configuration(
+        atomic_numbers=np.array([1]),
+        positions=np.zeros((1, 3)),
+        properties={"piezoelectric": piezoelectric},
+        property_weights={"piezoelectric": 1.0},
+        cell=np.eye(3),
+        pbc=(True, True, True),
+    )
+    atomic_data = AtomicData.from_config(config, z_table=table, cutoff=3.0)
+    batch = next(
+        iter(
+            torch_geometric.dataloader.DataLoader(
+                dataset=[atomic_data], batch_size=1, shuffle=False
+            )
+        )
+    )
+    assert batch.piezoelectric.shape == (1, 3, 6)
+    loss_fn = PESDielectricLoss(piezoelectric_weight=1.0)
+    assert loss_fn(batch, {"piezoelectric": batch.piezoelectric}) == 0.0
+
+    batch.piezoelectric_weight.zero_()
+    assert loss_fn(batch, {"piezoelectric": batch.piezoelectric + 1.0}) == 0.0
+
+
 def test_symmetric_contraction():
     operation = SymmetricContraction(
         irreps_in=o3.Irreps("16x0e + 16x1o + 16x2e"),

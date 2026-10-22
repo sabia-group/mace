@@ -17,6 +17,7 @@ class DefaultKeys(Enum):
     ELEC_TEMP = "elec_temp"
     OXN = "oxn"
     BEC = "BEC"
+    PIEZOELECTRIC = "REF_piezoelectric"
 
     @staticmethod
     def keydict() -> dict[str, str]:
