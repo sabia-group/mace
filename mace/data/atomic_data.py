@@ -40,6 +40,7 @@ class AtomicData(torch_geometric.data.Data):
     dipole: torch.Tensor
     charges: torch.Tensor
     polarizability: torch.Tensor
+    piezoelectric: torch.Tensor
     total_charge: torch.Tensor
     total_spin: torch.Tensor
     weight: torch.Tensor
@@ -51,6 +52,7 @@ class AtomicData(torch_geometric.data.Data):
     dipole_weight: torch.Tensor
     charges_weight: torch.Tensor
     polarizability_weight: torch.Tensor
+    piezoelectric_weight: torch.Tensor
     density_coefficients: torch.Tensor
     rcell: torch.Tensor
     volume: torch.Tensor
@@ -75,6 +77,7 @@ class AtomicData(torch_geometric.data.Data):
         dipole_weight: Optional[torch.Tensor],  # [,]
         charges_weight: Optional[torch.Tensor],  # [,]
         polarizability_weight: Optional[torch.Tensor],  # [,]
+        piezoelectric_weight: Optional[torch.Tensor],  # [,]
         forces: Optional[torch.Tensor],  # [n_nodes, 3]
         energy: Optional[torch.Tensor],  # [, ]
         stress: Optional[torch.Tensor],  # [1,3,3]
@@ -82,6 +85,9 @@ class AtomicData(torch_geometric.data.Data):
         dipole: Optional[torch.Tensor],  # [, 3]
         charges: Optional[torch.Tensor],  # [n_nodes, ]
         polarizability: Optional[torch.Tensor],  # [1, 3, 3]
+        piezoelectric: Optional[
+            torch.Tensor
+        ],  # [1, 3, 6], Voigt order xx, yy, zz, yz, xz, xy
         elec_temp: Optional[torch.Tensor],  # [,]
         total_charge: Optional[torch.Tensor] = None,  # [,]
         total_spin: Optional[torch.Tensor] = None,  # [,]
@@ -126,6 +132,7 @@ class AtomicData(torch_geometric.data.Data):
         assert total_charge is None or len(total_charge.shape) == 0
         assert total_spin is None or len(total_spin.shape) == 0
         assert polarizability is None or polarizability.shape == (1, 3, 3)
+        assert piezoelectric is None or piezoelectric.shape == (1, 3, 6)
         assert pbc is None or (pbc.shape[-1] == 3 and pbc.dtype == torch.bool)
         assert (
             density_coefficients is None or density_coefficients.shape[0] == num_nodes
@@ -154,6 +161,7 @@ class AtomicData(torch_geometric.data.Data):
             "dipole_weight": dipole_weight,
             "charges_weight": charges_weight,
             "polarizability_weight": polarizability_weight,
+            "piezoelectric_weight": piezoelectric_weight,
             "forces": forces,
             "energy": energy,
             "stress": stress,
@@ -163,6 +171,7 @@ class AtomicData(torch_geometric.data.Data):
             "oxn": oxn,
             "bec": bec,
             "polarizability": polarizability,
+            "piezoelectric": piezoelectric,
             "elec_temp": elec_temp,
             "total_charge": total_charge,
             "total_spin": total_spin,
@@ -299,6 +308,14 @@ class AtomicData(torch_geometric.data.Data):
             )
         elif len(polarizability_weight.shape) == 2:
             polarizability_weight = polarizability_weight.unsqueeze(0)
+        piezoelectric_weight = (
+            torch.tensor(
+                config.property_weights.get("piezoelectric"),
+                dtype=torch.get_default_dtype(),
+            )
+            if config.property_weights.get("piezoelectric") is not None
+            else torch.tensor(1.0, dtype=torch.get_default_dtype())
+        )
         forces = (
             torch.tensor(
                 config.properties.get("forces"), dtype=torch.get_default_dtype()
@@ -392,6 +409,14 @@ class AtomicData(torch_geometric.data.Data):
             if config.properties.get("polarizability") is not None
             else torch.zeros(1, 3, 3, dtype=torch.get_default_dtype())
         )
+        piezoelectric = (
+            torch.tensor(
+                config.properties.get("piezoelectric"),
+                dtype=torch.get_default_dtype(),
+            ).view(1, 3, 6)
+            if config.properties.get("piezoelectric") is not None
+            else torch.zeros(1, 3, 6, dtype=torch.get_default_dtype())
+        )
 
         total_spin = (
             torch.tensor(
@@ -457,6 +482,7 @@ class AtomicData(torch_geometric.data.Data):
             dipole_weight=dipole_weight,
             charges_weight=charges_weight,
             polarizability_weight=polarizability_weight,
+            piezoelectric_weight=piezoelectric_weight,
             forces=forces,
             energy=energy,
             stress=stress,
@@ -468,6 +494,7 @@ class AtomicData(torch_geometric.data.Data):
             elec_temp=elec_temp,
             total_charge=total_charge,
             polarizability=polarizability,
+            piezoelectric=piezoelectric,
             total_spin=total_spin,
             pbc=pbc,
             density_coefficients=density_coefficients,

@@ -1342,6 +1342,7 @@ class EnergyDipoleMACE(torch.nn.Module):
         compute_stress: bool = False,
         compute_displacement: bool = False,
         compute_bec: bool = False,
+        compute_piezoelectric: bool = False,
         compute_edge_forces: bool = False,  # pylint: disable=W0613
         compute_atomic_stresses: bool = False,  # pylint: disable=W0613
     ) -> Dict[str, Optional[torch.Tensor]]:
@@ -1356,7 +1357,12 @@ class EnergyDipoleMACE(torch.nn.Module):
             dtype=data["positions"].dtype,
             device=data["positions"].device,
         )
-        if compute_virials or compute_stress or compute_displacement:
+        if (
+            compute_virials
+            or compute_stress
+            or compute_displacement
+            or compute_piezoelectric
+        ):
             (
                 data["positions"],
                 data["shifts"],
@@ -1461,7 +1467,7 @@ class EnergyDipoleMACE(torch.nn.Module):
             positions=data["positions"],
             displacement=displacement,
             cell=data["cell"],
-            training=training or compute_bec,
+            training=training or compute_bec or compute_piezoelectric,
             compute_force=compute_force,
             compute_virials=compute_virials,
             compute_stress=compute_stress,
@@ -1500,7 +1506,7 @@ class EnergyDipoleMACE(torch.nn.Module):
             bec = compute_dielectric_gradients_loop(
                 dielectric=total_dipole,  # [:,:2] try for debugging
                 inputs=[data["positions"]],
-                clean=not training,
+                clean=not (training or compute_piezoelectric),
                 training=training,
             )[0]
             assert bec.shape == (
@@ -1516,5 +1522,44 @@ class EnergyDipoleMACE(torch.nn.Module):
             # - the third dimension corresponds to the Cartesian components of the dipole.
             # In this way every atom has 3x3 matrix, with dipole components as rows and position components as columns.
             out["bec"] = bec.moveaxis(0, 2)  # [3', n_nodes, 3] --> [n_nodes, 3, 3']
+
+        if compute_piezoelectric:
+            # The proper piezoelectric tensor is the derivative of the proper
+            # dipole with respect to symmetric strain, divided by volume:
+            # e_ijk = V^-1 d(mu_i - eta_il mu_l) / d eta_jk.
+            symmetric_displacement = 0.5 * (
+                displacement + displacement.transpose(-1, -2)
+            )
+            proper_total_dipole = total_dipole - torch.einsum(
+                "bij,bj->bi", symmetric_displacement, total_dipole
+            )
+            dmu_deta = compute_dielectric_gradients_loop(
+                dielectric=proper_total_dipole,
+                inputs=[displacement],
+                clean=not training,
+                training=training,
+            )[0]
+            assert dmu_deta.shape == (3, num_graphs, 3, 3), (
+                "The dipole-strain derivative has the wrong shape: expected "
+                f"{(3, num_graphs, 3, 3)}, got {dmu_deta.shape}."
+            )
+            piezoelectric = (
+                dmu_deta.moveaxis(0, 1)
+                / torch.linalg.det(data["cell"].view(-1, 3, 3)).abs()[
+                    :, None, None, None
+                ]
+            )
+            # Match the reference-data Voigt convention: xx, yy, zz, yz, xz, xy.
+            out["piezoelectric"] = torch.stack(
+                (
+                    piezoelectric[:, :, 0, 0],
+                    piezoelectric[:, :, 1, 1],
+                    piezoelectric[:, :, 2, 2],
+                    piezoelectric[:, :, 1, 2],
+                    piezoelectric[:, :, 0, 2],
+                    piezoelectric[:, :, 0, 1],
+                ),
+                dim=-1,
+            )
 
         return out

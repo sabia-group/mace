@@ -24,7 +24,13 @@ def configure_model(
 ):
     # Selecting outputs
     compute_virials = args.loss == "virials"
-    compute_stress = args.loss in ("stress", "huber", "universal", "pes+dipole")
+    compute_stress = args.loss in (
+        "stress",
+        "huber",
+        "universal",
+        "pes+dipole",
+        "pes+dipole+piezo",
+    )
 
     # if args.error_table == "pes+mu":
     #     assert (
@@ -48,6 +54,7 @@ def configure_model(
         "stress": compute_stress,
         "dipoles": args.compute_dipole,
         "polarizabilities": args.compute_polarizability,
+        "piezoelectric": args.loss == "pes+dipole+piezo",
     }
     if args.compute_bec is not None:
         output_args["bec"] = bool(args.compute_bec)
@@ -250,6 +257,14 @@ def _parse_literal_or_none(value):
 def _build_model(
     args, model_config, model_config_foundation, heads
 ):  # pylint: disable=too-many-return-statements
+    if args.loss == "pes+dipole+piezo" and args.model not in (
+        "EnergyDipoleMACE",
+        "LREnergyDipoleMACE",
+    ):
+        raise ValueError(
+            "The pes+dipole+piezo loss requires EnergyDipoleMACE or "
+            "LREnergyDipoleMACE."
+        )
     if args.model == "MACE":
         if args.interaction_first not in [
             "RealAgnosticInteractionBlock",

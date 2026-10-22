@@ -59,6 +59,7 @@ def update_keyspec_from_kwargs(
         "elec_temp_key",
         "total_charge_key",
         "polarizability_key",
+        "piezoelectric_key",
         "total_spin_key",
     ]
     arrays = ["forces_key", "charges_key", "oxn_key", "bec_key"]

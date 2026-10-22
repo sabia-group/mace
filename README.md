@@ -125,6 +125,16 @@ The keywords `--batch_size` and `--max_num_epochs` should be adapted based on th
 
 The code can handle training set with heterogeneous labels, for example containing both bulk structures with stress and isolated molecules. In this example, to make the code ignore stress on molecules, append to your molecules configuration a `config_stress_weight = 0.0`.
 
+#### Piezoelectric training
+
+`EnergyDipoleMACE` and `LREnergyDipoleMACE` can be trained with the
+`pes+dipole+piezo` loss. It evaluates the proper piezoelectric response
+\(e_{ijk}=V^{-1}\partial\mu_i^{\mathrm{proper}}/\partial\eta_{jk}\) by
+automatic differentiation. Reference tensors are graph-level extended-XYZ
+properties with shape `(3, 6)` and Voigt columns `(xx, yy, zz, yz, xz, xy)`;
+the default key is `REF_piezoelectric`. See
+[`examples/piezoelectric`](examples/piezoelectric) for a training config.
+
 By default, a figure displaying the progression of loss and RMSEs during training, along with a scatter plot of the model's inferences on the train, validation, and test sets, will be generated in the results folder at the end of training. This can be disabled using `--plot False`. To track these metrics throughout training (excluding inference on the test set), you can enable periodic plotting for the train and validation sets by specifying `--plot_frequency N`, which updates the plots every Nth epoch.
 
 #### Apple Silicon GPU acceleration

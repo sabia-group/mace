@@ -309,6 +309,18 @@ def test_energy_dipole_mace():
         output["dipole"][1].detach().numpy(),
     )
 
+    # Piezoelectric response is the proper dipole derivative in Voigt form.
+    # Give this molecular test batch a finite cell solely to exercise the
+    # periodic-response normalization.
+    batch.cell = torch.eye(3, dtype=batch.positions.dtype).repeat(2, 1, 1) * 5.0
+    piezoelectric_output = model(
+        batch.to_dict(), training=True, compute_piezoelectric=True
+    )
+    assert piezoelectric_output["piezoelectric"].shape == (2, 3, 6)
+    assert torch.isfinite(piezoelectric_output["piezoelectric"]).all()
+    piezoelectric_output["piezoelectric"].square().sum().backward()
+    assert any(parameter.grad is not None for parameter in model.parameters())
+
     # test compiled version
     model_compiled = jit.compile(model)
     batch = next(iter(data_loader))

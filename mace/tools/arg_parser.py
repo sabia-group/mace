@@ -717,9 +717,15 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--bec_key",
-        help="Key of oxidation numbers in training xyz",
+        help="Key of Born effective charges in training xyz",
         type=str,
         default=DefaultKeys.BEC.value,
+    )
+    parser.add_argument(
+        "--piezoelectric_key",
+        help="Key of piezoelectric tensors in training xyz (3x6 Voigt form)",
+        type=str,
+        default=DefaultKeys.PIEZOELECTRIC.value,
     )
     parser.add_argument(
         "--compute_bec",
@@ -777,6 +783,7 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         choices=[
             "pes",
             "pes+dipole",
+            "pes+dipole+piezo",
             "weighted",
             "forces_only",
             "virials",
@@ -854,6 +861,20 @@ def build_default_arg_parser() -> argparse.ArgumentParser:
         type=float,
         default=1.0,
         dest="swa_bec_weight",
+    )
+    parser.add_argument(
+        "--piezoelectric_weight",
+        help="weight of piezoelectric loss",
+        type=float,
+        default=1.0,
+    )
+    parser.add_argument(
+        "--swa_piezoelectric_weight",
+        "--stage_two_piezoelectric_weight",
+        help="weight of piezoelectric loss after starting Stage Two",
+        type=float,
+        default=1.0,
+        dest="swa_piezoelectric_weight",
     )
     parser.add_argument(
         "--swa_polarizability_weight",
