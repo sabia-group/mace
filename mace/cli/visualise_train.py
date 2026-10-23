@@ -503,9 +503,9 @@ def plot_inference_from_results(
                 scatter = ax.scatter(
                     result["bec"]["reference"],
                     result["bec"]["predicted"],
-                    marker=marker,
-                    color=fixed_color_train_valid,
-                    label=name,
+                    marker="o",
+                    color=fixed_color_test,
+                    label="Test",
                 )
 
             # Only add to legend_labels if scatter was assigned
