@@ -167,7 +167,7 @@ def test_dipole_mace():
     )
     batch = next(iter(data_loader))
     output = model(
-        batch,
+        batch.to_dict(),
         training=True,
     )
     # sanity check of dipoles being the right shape
@@ -176,6 +176,23 @@ def test_dipole_mace():
     assert np.allclose(
         np.array(rot @ output["dipole"][0].detach().numpy()),
         output["dipole"][1].detach().numpy(),
+    )
+
+    # test compiled version
+    model_compiled = jit.compile(model)
+    batch = next(iter(data_loader))
+    output_compiled = model_compiled(
+        batch.to_dict(),
+        training=True,
+    )
+
+    assert np.allclose(
+        np.array(rot @ output_compiled["dipole"][0].detach().numpy()),
+        output_compiled["dipole"][1].detach().numpy(),
+    )
+
+    assert np.allclose(
+        output_compiled["dipole"].detach().numpy(), output["dipole"].detach().numpy()
     )
 
 
@@ -264,7 +281,7 @@ def test_energy_dipole_mace():
         atomic_numbers=table.zs,
         correlation=3,
     )
-    model = modules.EnergyDipolesMACE(**model_config)
+    model = modules.EnergyDipoleMACE(**model_config)
 
     atomic_data = data.AtomicData.from_config(config, z_table=table, cutoff=3.0)
     atomic_data2 = data.AtomicData.from_config(
@@ -290,6 +307,42 @@ def test_energy_dipole_mace():
     assert np.allclose(
         np.array(rot @ output["dipole"][0].detach().numpy()),
         output["dipole"][1].detach().numpy(),
+    )
+
+    # Piezoelectric response is the proper dipole derivative in Voigt form.
+    # Give this molecular test batch a finite cell solely to exercise the
+    # periodic-response normalization.
+    batch.cell = torch.eye(3, dtype=batch.positions.dtype).repeat(2, 1, 1) * 5.0
+    piezoelectric_output = model(
+        batch.to_dict(), training=True, compute_piezoelectric=True
+    )
+    assert piezoelectric_output["piezoelectric"].shape == (2, 3, 6)
+    assert torch.isfinite(piezoelectric_output["piezoelectric"]).all()
+    piezoelectric_output["piezoelectric"].square().sum().backward()
+    assert any(parameter.grad is not None for parameter in model.parameters())
+
+    # test compiled version
+    model_compiled = jit.compile(model)
+    batch = next(iter(data_loader))
+    output_compiled = model_compiled(
+        batch.to_dict(),
+        training=True,
+    )
+
+    # test energy is invariant
+    assert torch.allclose(output_compiled["energy"][0], output_compiled["energy"][1])
+
+    # test equivariance of output dipoles
+    assert np.allclose(
+        np.array(rot @ output_compiled["dipole"][0].detach().numpy()),
+        output_compiled["dipole"][1].detach().numpy(),
+    )
+
+    assert np.allclose(
+        output_compiled["dipole"].detach().numpy(), output["dipole"].detach().numpy()
+    )
+    assert np.allclose(
+        output_compiled["energy"].detach().numpy(), output["energy"].detach().numpy()
     )
 
 

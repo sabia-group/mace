@@ -8,9 +8,9 @@ from mace.data import AtomicData, Configuration
 from mace.modules import (
     AtomicEnergiesBlock,
     BesselBasis,
+    PESDielectricLoss,
     PolynomialCutoff,
     SymmetricContraction,
-    WeightedEnergyForcesLoss,
     WeightedHuberEnergyForcesStressLoss,
     compute_mean_rms_energy_forces,
     compute_statistics,
@@ -148,7 +148,7 @@ def _set_torch_default_dtype():
 
 
 def test_weighted_loss(config, table):
-    loss1 = WeightedEnergyForcesLoss(energy_weight=1, forces_weight=10)
+    loss1 = PESDielectricLoss(energy_weight=1, forces_weight=10)
     loss2 = WeightedHuberEnergyForcesStressLoss(energy_weight=1, forces_weight=10)
     data = AtomicData.from_config(config, z_table=table, cutoff=3.0)
     data_loader = torch_geometric.dataloader.DataLoader(
@@ -167,6 +167,32 @@ def test_weighted_loss(config, table):
     assert out1 == 0.0
     out2 = loss2(batch, pred)
     assert out2 == 0.0
+
+
+def test_piezoelectric_loss_and_data_masking(table):
+    piezoelectric = np.arange(18, dtype=float).reshape(3, 6)
+    config = Configuration(
+        atomic_numbers=np.array([1]),
+        positions=np.zeros((1, 3)),
+        properties={"piezoelectric": piezoelectric},
+        property_weights={"piezoelectric": 1.0},
+        cell=np.eye(3),
+        pbc=(True, True, True),
+    )
+    atomic_data = AtomicData.from_config(config, z_table=table, cutoff=3.0)
+    batch = next(
+        iter(
+            torch_geometric.dataloader.DataLoader(
+                dataset=[atomic_data], batch_size=1, shuffle=False
+            )
+        )
+    )
+    assert batch.piezoelectric.shape == (1, 3, 6)
+    loss_fn = PESDielectricLoss(piezoelectric_weight=1.0)
+    assert loss_fn(batch, {"piezoelectric": batch.piezoelectric}) == 0.0
+
+    batch.piezoelectric_weight.zero_()
+    assert loss_fn(batch, {"piezoelectric": batch.piezoelectric + 1.0}) == 0.0
 
 
 def test_symmetric_contraction():

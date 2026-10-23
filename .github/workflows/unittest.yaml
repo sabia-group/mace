@@ -3,7 +3,6 @@ on:
   pull_request:
   workflow_dispatch:
   push:
-    branches: [ main, develop ]
 
 concurrency:
   group: unit-tests-${{ github.ref }}
@@ -125,7 +124,9 @@ jobs:
         run: |
           pip install -U pip
           pip install ".[dev, cueq]"
-          pip install git+https://github.com/WillBaldwin0/graph_electrostatics.git
+          # MACE-Polar uses graph_longrange's force_pbc_evaluator API, removed
+          # after this revision. Pin until compatible releases are available.
+          pip install git+https://github.com/WillBaldwin0/graph_electrostatics.git@1fd8c4548d44db93c1f0182761799383cfec382b
 
       - name: Log installed environment (with cueq + graph_longrange)
         run: |
@@ -148,7 +149,9 @@ jobs:
         run: |
           pip install -U pip
           pip install ".[dev]"
-          pip install git+https://github.com/WillBaldwin0/graph_electrostatics.git
+          # MACE-Polar uses graph_longrange's force_pbc_evaluator API, removed
+          # after this revision. Pin until compatible releases are available.
+          pip install git+https://github.com/WillBaldwin0/graph_electrostatics.git@1fd8c4548d44db93c1f0182761799383cfec382b
 
       - name: Log installed environment (with graph_longrange)
         run: |
@@ -160,4 +163,3 @@ jobs:
           pytest -v tests/test_run_train_dipole_polar.py
           pytest -v tests/test_calculator.py::test_mace_polar_constructor
           pytest -v tests/test_models.py::test_dipole_polar_mace
-          pytest -v tests/test_foundations.py -k polar

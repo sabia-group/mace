@@ -125,6 +125,16 @@ The keywords `--batch_size` and `--max_num_epochs` should be adapted based on th
 
 The code can handle training set with heterogeneous labels, for example containing both bulk structures with stress and isolated molecules. In this example, to make the code ignore stress on molecules, append to your molecules configuration a `config_stress_weight = 0.0`.
 
+#### Piezoelectric training
+
+`EnergyDipoleMACE` and `LREnergyDipoleMACE` can be trained with the
+`pes+dipole+piezo` loss. It evaluates the proper piezoelectric response
+\(e_{ijk}=V^{-1}\partial\mu_i^{\mathrm{proper}}/\partial\eta_{jk}\) by
+automatic differentiation. Reference tensors are graph-level extended-XYZ
+properties with shape `(3, 6)` and Voigt columns `(xx, yy, zz, yz, xz, xy)`;
+the default key is `REF_piezoelectric`. See
+[`examples/piezoelectric`](examples/piezoelectric) for a training config.
+
 By default, a figure displaying the progression of loss and RMSEs during training, along with a scatter plot of the model's inferences on the train, validation, and test sets, will be generated in the results folder at the end of training. This can be disabled using `--plot False`. To track these metrics throughout training (excluding inference on the test set), you can enable periodic plotting for the train and validation sets by specifying `--plot_frequency N`, which updates the plots every Nth epoch.
 
 #### Apple Silicon GPU acceleration
@@ -305,6 +315,32 @@ PolarMACE checkpoints are electrostatics foundation models for molecular chemist
 For usage, outputs, and training/finetuning details, see the PolarMACE guide:
 
 - https://mace-docs.readthedocs.io/en/latest/guide/polar_mace.html
+
+### Long-range energy and dipole model
+
+`LREnergyDipoleMACE` is a drop-in long-range variant of `EnergyDipoleMACE`.
+An existing training configuration only needs `model: EnergyDipoleMACE` changed
+to `model: LREnergyDipoleMACE`. It keeps the same energy, force, dipole, and
+oxidation-number targets and outputs, while adding charge-conserving learned
+monopoles, one global field update of the existing intrinsic atomic dipoles, and
+Gaussian charge--dipole electrostatics from `graph_longrange`. The defaults are
+`l_max=1`, 1.5 Angstrom smearing, one field update, a 1.5 reciprocal-space
+cutoff factor, and electrostatic self interaction. `graph-longrange` 0.4.0 or a
+compatible `graph_electrostatics` installation is required.
+
+The public atomic and total dipoles remain Cartesian `[x, y, z]` values in
+electron-Angstrom, as in `EnergyDipoleMACE`. Internally, intrinsic dipoles are
+permuted to the real-spherical Condon--Shortley order `[y, z, x]` expected by
+`graph_longrange`; no extra sign or normalization is applied because its
+`normalize="multipoles"` basis consumes physical monopoles and dipoles. The
+electrostatics library uses electron, volt, and Angstrom internally, so its
+energy is added directly in eV without a Bohr, Hartree, or elementary-charge
+conversion. Its one-half energy contraction handles pair double counting, and
+the default includes Gaussian self energy. Periodic energy uses reciprocal
+images; open-boundary energy uses the library's real-space evaluator. The
+oxidation-number branch continues to use the positions supplied to
+`EnergyDipoleMACE` (including their unwrapped lattice translations), while the
+learned continuous charges are used only for the field and electrostatic energy.
 
 ### Finetuning foundation models
 

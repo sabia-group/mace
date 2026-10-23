@@ -1,0 +1,33 @@
+# Train an EnergyDipoleMACE model on energy, forces, stress, dipoles, and
+# proper piezoelectric tensors.  The tensor label is a 3 x 6 info property in
+# Voigt order (xx, yy, zz, yz, xz, xy), as in REF_piezoelectric.
+name: batio3_piezo
+model: EnergyDipoleMACE
+train_file: train.extxyz
+valid_file: validation.extxyz
+
+energy_key: REF_energy
+forces_key: REF_forces
+stress_key: REF_stress
+dipole_key: REF_dipole
+oxn_key: oxn
+piezoelectric_key: REF_piezoelectric
+
+loss: pes+dipole+piezo
+energy_weight: 1.0
+forces_weight: 100.0
+stress_weight: 10.0
+dipole_weight: 1.0
+piezoelectric_weight: 100.0
+
+num_channels: 32
+max_ell: 2
+max_L: 3
+correlation: 2
+r_max: 5.0
+E0s: average
+default_dtype: float64
+batch_size: 1
+valid_batch_size: 1
+max_num_epochs: 1000
+device: cuda

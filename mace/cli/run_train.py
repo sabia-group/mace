@@ -9,6 +9,7 @@ import glob
 import json
 import logging
 import os
+import traceback
 from copy import deepcopy
 from pathlib import Path
 from typing import List, Optional
@@ -127,6 +128,26 @@ def run(args) -> None:
         logging.info("Cannot find MACE version, please install MACE via pip")
     logging.debug(f"Configuration: {args}")
 
+    # environment variables
+    value = str(args.use_pbc_dipole).lower()
+    if "USE_PBC_DIPOLE" in os.environ:  # set in the submission script
+        old_value = str(os.environ["USE_PBC_DIPOLE"]).lower()
+        logging.warning(
+            f"Environment variable 'USE_PBC_DIPOLE' already defined and equal to {old_value}, overwriting it to {value}."
+        )
+    os.environ["USE_PBC_DIPOLE"] = value
+    logging.info(f"Using environment variable 'USE_PBC_DIPOLE' equal to {value}")
+
+    # environment variables
+    value = str(args.transpose_bec).lower()
+    if "TRANSPOSE_BEC" in os.environ:  # set in the submission script
+        old_value = str(os.environ["TRANSPOSE_BEC"]).lower()
+        logging.warning(
+            f"Environment variable 'TRANSPOSE_BEC' already defined and equal to {old_value}, overwriting it to {value}."
+        )
+    os.environ["TRANSPOSE_BEC"] = value
+    logging.info(f"Using environment variable 'TRANSPOSE_BEC' equal to {value}")
+
     tools.set_default_dtype(args.default_dtype)
     device = tools.init_device(args.device)
     commit = print_git_commit()
@@ -203,13 +224,20 @@ def run(args) -> None:
             ), "average atomic energies cannot be used for multiheads finetuning"
             if not args.force_mh_ft_lr:
                 logging.info(
-                    "Multihead finetuning mode, setting learning rate to 0.0001 and EMA to True. To use a different learning rate, set --force_mh_ft_lr=True."
+                    "Multihead finetuning mode, setting stage-one learning rate to "
+                    "0.0001, stage-two learning rate to 0.00001, and EMA to True. "
+                    "To use different learning rates, set --force_mh_ft_lr=True."
                 )
                 args.lr = 0.0001
+                args.swa_lr = 0.00001
                 args.ema = True
                 args.ema_decay = 0.99999
             logging.info(
-                "Using multiheads finetuning mode, setting learning rate to 0.0001 and EMA to True"
+                "Using multiheads finetuning mode with stage-one learning rate %s, "
+                "stage-two learning rate %s, and EMA=%s",
+                args.lr,
+                args.swa_lr,
+                args.ema,
             )
         if hasattr(model_foundation, "heads"):
             if len(model_foundation.heads) > 1:
@@ -380,7 +408,13 @@ def run(args) -> None:
         logging.info(
             "==================Using multiheads finetuning mode=================="
         )
-        args.loss = "universal"
+        if args.model in ("EnergyDipoleMACE", "LREnergyDipoleMACE"):
+            logging.info(
+                "Keeping %s loss for multihead energy/dipole fine-tuning",
+                args.loss,
+            )
+        else:
+            args.loss = "universal"
 
         all_ase_readable = all(
             all(check_path_ase_read(f) for f in head_config.train_file)
@@ -409,9 +443,7 @@ def run(args) -> None:
                 f"Total number of configurations in pretraining: train={len(head_config_pt.collections.train)}, valid={len(head_config_pt.collections.valid)}"
             )
         else:
-            logging.debug(
-                "Using LMDB/HDF5 datasets for pretraining or fine-tuning - skipping ratio check"
-            )
+            raise ValueError("LMDB/HDF5 datasets not supported")
 
     # Atomic number table
     # yapf: disable
@@ -553,7 +585,7 @@ def run(args) -> None:
         args.compute_polarizability = True
     else:
         dipole_only = False
-        if args.model == "EnergyDipolesMACE":
+        if args.model in ("EnergyDipoleMACE", "LREnergyDipoleMACE"):
             args.compute_dipole = True
             args.compute_energy = True
             args.compute_forces = True
@@ -855,14 +887,24 @@ def run(args) -> None:
     if args.restart_latest:
         try:
             opt_start_epoch = checkpoint_handler.load_latest(
-                state=tools.CheckpointState(model, optimizer, lr_scheduler),
+                state=tools.CheckpointState(
+                    model,
+                    optimizer,
+                    lr_scheduler,
+                    swa.model if swa is not None else None,
+                ),
                 swa=True,
                 device=device,
             )
         except Exception:  # pylint: disable=W0703
             try:
                 opt_start_epoch = checkpoint_handler.load_latest(
-                    state=tools.CheckpointState(model, optimizer, lr_scheduler),
+                    state=tools.CheckpointState(
+                        model,
+                        optimizer,
+                        lr_scheduler,
+                        swa.model if swa is not None else None,
+                    ),
                     swa=False,
                     device=device,
                 )
@@ -1042,8 +1084,9 @@ def run(args) -> None:
             break
 
     for swa_eval in swas:
+        swa_model = swa.model if swa_eval and swa is not None else None
         epoch = checkpoint_handler.load_latest(
-            state=tools.CheckpointState(model, optimizer, lr_scheduler),
+            state=tools.CheckpointState(model, optimizer, lr_scheduler, swa_model),
             swa=swa_eval,
             device=device,
         )
@@ -1053,8 +1096,13 @@ def run(args) -> None:
             # after param.requires_grad = False was called before evaluating stage-one model
             for param in model.parameters():
                 param.requires_grad = True
-            distributed_model = DDP(model, device_ids=[local_rank])
-        model_to_evaluate = model if not args.distributed else distributed_model
+            distributed_model = DDP(
+                swa_model if swa_model is not None else model,
+                device_ids=[local_rank],
+            )
+        model_to_evaluate = (
+            swa_model if swa_model is not None else model
+        ) if not args.distributed else distributed_model
         if swa_eval:
             logging.info(f"Loaded Stage two model from epoch {epoch} for evaluation")
         else:
@@ -1067,16 +1115,18 @@ def run(args) -> None:
             else:
                 model_path = Path(args.checkpoints_dir) / (tag + ".model")
             logging.info(f"Saving model to {model_path}")
-            model_to_save = deepcopy(model)
+            model_to_save = deepcopy(
+                swa_model if swa_model is not None else model
+            )
             if args.lora:
                 logging.info("Merging LoRA weights into base model")
                 merge_lora_weights(model_to_save)
             if args.enable_cueq and not args.only_cueq:
                 logging.info("RUNING CUEQ TO E3NN")
-                model_to_save = run_cueq_to_e3nn(deepcopy(model), device=device)
+                model_to_save = run_cueq_to_e3nn(deepcopy(model_to_save), device=device)
             if args.enable_oeq:
                 logging.info("RUNING OEQ TO E3NN")
-                model_to_save = run_oeq_to_e3nn(deepcopy(model), device=device)
+                model_to_save = run_oeq_to_e3nn(deepcopy(model_to_save), device=device)
             if args.save_cpu:
                 model_to_save = model_to_save.to("cpu")
             torch.save(model_to_save, model_path)
@@ -1103,7 +1153,8 @@ def run(args) -> None:
                         _extra_files=extra_files,
                     )
                 except Exception as e:  # pylint: disable=W0718
-                    pass
+                    logging.error(f"Model compilation failed: {e}")
+                    traceback.print_exc()
             else:
                 torch.save(model_to_save, Path(args.model_dir) / (args.name + ".model"))
                 try:
@@ -1118,7 +1169,8 @@ def run(args) -> None:
                         _extra_files=extra_files,
                     )
                 except Exception as e:  # pylint: disable=W0718
-                    pass
+                    logging.error(f"Model compilation failed: {e}")
+                    traceback.print_exc()
 
         logging.info("Computing metrics for training, validation, and test sets")
         for param in model.parameters():

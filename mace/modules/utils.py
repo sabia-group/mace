@@ -10,7 +10,6 @@ from typing import Dict, List, NamedTuple, Optional, Tuple
 import numpy as np
 import torch
 import torch.utils.data
-from scipy.constants import c, e
 
 from mace.tools import to_numpy
 from mace.tools.scatter import scatter_mean, scatter_std, scatter_sum
@@ -376,12 +375,21 @@ def compute_mean_rms_energy_forces(
 
     # mean = to_numpy(torch.mean(atom_energies)).item()
     # rms = to_numpy(torch.sqrt(torch.mean(torch.square(forces)))).item()
-    mean = to_numpy(scatter_mean(src=atom_energies, index=head, dim=0).squeeze(-1))
+    ii = ~torch.isnan(atom_energies)
+    mean = to_numpy(
+        scatter_mean(src=atom_energies[ii], index=head[ii], dim=0).squeeze(-1)
+    )
+
+    ii = ~torch.isnan(forces).any(dim=-1)
     rms = to_numpy(
         torch.sqrt(
-            scatter_mean(src=torch.square(forces), index=head_batch, dim=0).mean(-1)
+            scatter_mean(
+                src=torch.square(forces[ii]), index=head_batch[ii], dim=0
+            ).mean(-1)
         )
     )
+    assert not np.any(np.isnan(mean)), "Mean energy is NaN"
+    assert not np.any(np.isnan(rms)), "RMS force is NaN"
     rms = _check_non_zero(rms)
 
     return mean, rms
@@ -478,15 +486,17 @@ def compute_rms_dipoles(
     return rms
 
 
+@torch.jit.script
 def compute_fixed_charge_dipole(
     charges: torch.Tensor,
     positions: torch.Tensor,
     batch: torch.Tensor,
     num_graphs: int,
-) -> torch.Tensor:
-    mu = positions * charges.unsqueeze(-1) / (1e-11 / c / e)  # [N_atoms,3]
-    return scatter_sum(
-        src=mu, index=batch.unsqueeze(-1), dim=0, dim_size=num_graphs
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    mu = positions * charges.unsqueeze(-1)  # [N_atoms,3]
+    return (
+        scatter_sum(mu, batch.unsqueeze(-1), dim=0, dim_size=num_graphs),
+        mu,
     )  # [N_graphs,3]
 
 
@@ -548,29 +558,109 @@ def compute_dielectric_gradients(
         I_N = torch.eye(dielectric.shape[-1]).to(dielectric.device)
         gradient = torch.vmap(get_vjp, in_dims=0, out_dims=0)(I_N)[0]
     except RuntimeError:
-        gradient = compute_dielectric_gradients_loop(dielectric, positions).detach()
+        gradient = compute_dielectric_gradients_loop(
+            dielectric, positions, clean=False, training=True
+        )[0].detach()
     if gradient is None:
         return torch.zeros((positions.shape[0], dielectric.shape[-1], 3))
     return gradient
 
 
+def get_dipole_outputs(
+    atomic_dipoles: torch.Tensor, charges: torch.Tensor, positions: torch.Tensor
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    Compute total and baseline dipole moments from atomic dipoles, charges, and positions.
+
+    Args:
+        atomic_dipoles (torch.Tensor): Tensor of atomic dipole vectors.
+        charges (torch.Tensor): Tensor of atomic charges.
+        positions (torch.Tensor): Tensor of atomic positions.
+
+    Returns:
+        Tuple[torch.Tensor, torch.Tensor]: A tuple containing the total dipole (atomic + baseline)
+        and the baseline dipole (charge * position).
+    """
+    baseline = positions * charges.unsqueeze(-1)
+    return atomic_dipoles + baseline, baseline
+
+
+# def compute_dielectric_gradients_loop(
+#     dielectric: torch.Tensor,
+#     positions: torch.Tensor,
+# ) -> torch.Tensor:
+#     gradients = []
+#     for i in range(dielectric.shape[-1]):
+#         grad_elem = dielectric[:, i]
+#         hess_row = torch.autograd.grad(
+#             grad_elem,
+#             positions,
+#             retain_graph=True,
+#             create_graph=True,
+#             allow_unused=False,
+#         )[0]
+#         gradients.append(hess_row)
+#     gradients = torch.stack(gradients)
+#     return gradients
+
+
 def compute_dielectric_gradients_loop(
-    dielectric: torch.Tensor,
-    positions: torch.Tensor,
-) -> torch.Tensor:
-    gradients = []
-    for i in range(dielectric.shape[-1]):
-        grad_elem = dielectric[:, i]
-        hess_row = torch.autograd.grad(
-            grad_elem,
-            positions,
-            retain_graph=True,
-            create_graph=True,
+    dielectric: torch.Tensor, inputs: List[torch.Tensor], clean: bool, training: bool
+) -> List[torch.Tensor]:
+    """
+    Compute d(dielectric[:, i]) / d(inputs[j]) for all i and inputs.
+
+    Args:
+        dielectric: [B, D] tensor output.
+        inputs: list of input tensors used to compute dielectric.
+        clean: if True, frees autograd graph earlier.
+
+    Returns:
+        List of gradients, one per input, each with shape (..., D).
+    """
+
+    clean = bool(clean)
+
+    n_out = dielectric.shape[-1]
+    n_in = len(inputs)
+
+    # Storage: [input_index][output_index]
+    # Later stacked into [input, ..., D]
+    d_dielectric_dr = [
+        torch.zeros(
+            (n_out,) + inputs[j].shape,
+            dtype=inputs[j].dtype,
+            device=inputs[j].device,
+        )
+        for j in range(n_in)
+    ]
+
+    last = n_out - 1
+
+    for i in range(n_out):
+
+        # Select single output component: [B, 1]
+        outputs = dielectric[:, i].unsqueeze(-1)
+
+        # Gradient "seed" for VJP (one per output scalar)
+        grad_outputs = (torch.ones_like(outputs),)
+
+        # Compute vector-Jacobian product wrt all inputs
+        retain_graph = (i != last) or (not clean)
+        gradients = torch.autograd.grad(
+            outputs=[outputs],
+            inputs=inputs,
+            grad_outputs=grad_outputs,
+            retain_graph=retain_graph,
+            create_graph=training,  # if True the gradients will be autodiffertiable
             allow_unused=False,
-        )[0]
-        gradients.append(hess_row)
-    gradients = torch.stack(gradients)
-    return gradients
+        )
+        # Store per-input gradient slice for this output component
+        for j, g in enumerate(gradients):
+            d_dielectric_dr[j][i] = g if g is not None else torch.zeros_like(inputs[j])
+
+    # Stack output dimension last: [input_shape..., D]
+    return d_dielectric_dr
 
 
 class InteractionKwargs(NamedTuple):

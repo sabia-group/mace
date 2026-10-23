@@ -35,6 +35,7 @@ from .utils import (
     compute_rel_rmse,
     compute_rmse,
     filter_nonzero_weight,
+    get_model_output,
 )
 
 
@@ -129,7 +130,7 @@ def valid_err_log(
     elif log_errors == "DipoleRMSE":
         error_mu = eval_metrics["rmse_mu_per_atom"] * 1e3
         logging.info(
-            f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, RMSE_MU_per_atom={error_mu:8.2f} mDebye",
+            f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, RMSE_MU_per_atom={error_mu:8.2f} me*ang",
         )
     elif log_errors == "DipolePolarRMSE":
         error_mu = eval_metrics["rmse_mu_per_atom"] * 1e3
@@ -142,8 +143,20 @@ def valid_err_log(
         error_f = eval_metrics["rmse_f"] * 1e3
         error_mu = eval_metrics["rmse_mu_per_atom"] * 1e3
         logging.info(
-            f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, RMSE_E_per_atom={error_e:8.2f} meV, RMSE_F={error_f:8.2f} meV / A, RMSE_Mu_per_atom={error_mu:8.2f} mDebye",
+            f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, RMSE_E_per_atom={error_e:8.2f} meV, RMSE_F={error_f:8.2f} meV / A, RMSE_Mu_per_atom={error_mu:8.2f} me*ang",
         )
+    elif log_errors in ["pes+mu", "pes+bec", "pes+mu+bec"]:
+        error_e = eval_metrics["rmse_e_per_atom"] * 1e3
+        error_f = eval_metrics["rmse_f"] * 1e3
+        error_stress = eval_metrics["rmse_stress"] * 1e3
+        message = f"{inintial_phrase}: head: {valid_loader_name}, loss={valid_loss:8.8f}, RMSE_E_per_atom={error_e:8.2f} meV, RMSE_F={error_f:8.2f} meV / A, RMSE_stress={error_stress:8.2f} meV / A^3"
+        if "mu" in log_errors:
+            error_mu = eval_metrics["rmse_mu_per_atom"] * 1e3
+            message = f"{message}, RMSE_Mu_per_atom={error_mu:8.2f} me*ang"
+        if "bec" in log_errors:
+            error_bec = eval_metrics["rmse_bec"] * 1e3
+            message = f"{message}, RMSE_BEC={error_bec:8.2f} me"
+        logging.info(message)
 
 
 def train(
@@ -220,9 +233,6 @@ def train(
                 swa_start = False
                 keep_last = True
             loss_fn = swa.loss_fn
-            swa.model.update_parameters(model)
-            if epoch > start_epoch:
-                swa.scheduler.step()
 
         # Train
         if distributed:
@@ -244,16 +254,31 @@ def train(
             distributed_model=distributed_model,
             rank=rank,
         )
+        if swa is not None and epoch >= swa.start:
+            # Average the same EMA parameters used for validation and checkpointing.
+            param_context = (
+                ema.average_parameters() if ema is not None else nullcontext()
+            )
+            with param_context:
+                swa.model.update_parameters(model)
+            # Step after the optimizer has taken an epoch of updates. In particular,
+            # this avoids advancing SWALR before its first optimizer step.
+            swa.scheduler.step()
         if distributed:
             torch.distributed.barrier()
 
         # Validate
         if epoch % eval_interval == 0:
+            stage_two_active = swa is not None and epoch >= swa.start
             model_to_evaluate = (
-                model if distributed_model is None else distributed_model
+                swa.model
+                if stage_two_active
+                else model if distributed_model is None else distributed_model
             )
             param_context = (
-                ema.average_parameters() if ema is not None else nullcontext()
+                nullcontext()
+                if stage_two_active
+                else ema.average_parameters() if ema is not None else nullcontext()
             )
             if "ScheduleFree" in type(optimizer).__name__:
                 optimizer.eval()
@@ -286,10 +311,10 @@ def train(
                                 "valid_rmse_f": eval_metrics["rmse_f"],
                             }
                 if plotter and epoch % plotter.plot_frequency == 0:
-                    try:
-                        plotter.plot(epoch, model_to_evaluate, rank)
-                    except Exception as e:  # pylint: disable=broad-except
-                        logging.debug(f"Plotting failed: {e}")
+                    # try:
+                    plotter.plot(epoch, model_to_evaluate, rank)
+                    # except Exception as e:  # pylint: disable=broad-except
+                    #     logging.debug(f"Plotting failed: {e}")
                 valid_loss = (
                     valid_loss_head  # consider only the last head for the checkpoint
                 )
@@ -318,7 +343,12 @@ def train(
                         )
                         with param_context:
                             checkpoint_handler.save(
-                                state=CheckpointState(model, optimizer, lr_scheduler),
+                                state=CheckpointState(
+                                    model,
+                                    optimizer,
+                                    lr_scheduler,
+                                    swa.model if swa is not None else None,
+                                ),
                                 epochs=epoch,
                                 keep_last=True,
                             )
@@ -330,7 +360,12 @@ def train(
                     )
                     with param_context:
                         checkpoint_handler.save(
-                            state=CheckpointState(model, optimizer, lr_scheduler),
+                            state=CheckpointState(
+                                model,
+                                optimizer,
+                                lr_scheduler,
+                                swa.model if swa is not None else None,
+                            ),
                             epochs=epoch,
                             keep_last=keep_last,
                         )
@@ -411,18 +446,11 @@ def take_step(
 ) -> Tuple[float, Dict[str, Any]]:
     start_time = time.time()
     batch = batch.to(device)
-    batch_dict = batch.to_dict()
 
     def closure():
         optimizer.zero_grad(set_to_none=True)
-        output = model(
-            batch_dict,
-            training=True,
-            compute_force=output_args["forces"],
-            compute_virials=output_args["virials"],
-            compute_stress=output_args["stress"],
-        )
-        loss = loss_fn(pred=output, ref=batch)
+        output = get_model_output(model, batch, output_args)
+        loss: torch.Tensor = loss_fn(pred=output, ref=batch)
         loss.backward()
         if max_grad_norm is not None:
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=max_grad_norm)
@@ -569,15 +597,18 @@ def evaluate(
 
     with preserve_grad_state(model):
         for batch in data_loader:
-            batch = batch.to(device)
-            batch_dict = batch.to_dict()
-            output = model(
-                batch_dict,
-                training=False,
-                compute_force=output_args["forces"],
-                compute_virials=output_args["virials"],
-                compute_stress=output_args["stress"],
-            )
+            # batch = batch.to(device)
+            # batch_dict = batch.to_dict()
+            # kwargs = {
+            #     "training": False,
+            #     "compute_force": output_args["forces"],
+            #     "compute_virials": output_args["virials"],
+            #     "compute_stress": output_args["stress"],
+            # }
+            # if "bec" in output_args:
+            #     kwargs["compute_bec"] = output_args["bec"]
+            # output = model(batch_dict, **kwargs)
+            output = get_model_output(model, batch.to(device), output_args, False)
             avg_loss, aux = metrics(batch, output)
     avg_loss, aux = metrics.compute()
     aux["time"] = time.time() - start_time
@@ -586,7 +617,7 @@ def evaluate(
     return avg_loss, aux
 
 
-class MACELoss(Metric):
+class MACELoss(Metric):  # pylint: disable=abstract-method
     def __init__(self, loss_fn: torch.nn.Module):
         super().__init__()
         self.loss_fn = loss_fn
@@ -611,6 +642,9 @@ class MACELoss(Metric):
         self.add_state("mus", default=[], dist_reduce_fx="cat")
         self.add_state("delta_mus", default=[], dist_reduce_fx="cat")
         self.add_state("delta_mus_per_atom", default=[], dist_reduce_fx="cat")
+        self.add_state("becs_computed", default=torch.tensor(0.0), dist_reduce_fx="sum")
+        self.add_state("becs", default=[], dist_reduce_fx="cat")
+        self.add_state("delta_becs", default=[], dist_reduce_fx="cat")
         self.add_state(
             "polarizability_computed", default=torch.tensor(0.0), dist_reduce_fx="sum"
         )
@@ -657,6 +691,20 @@ class MACELoss(Metric):
                 batch, self.delta_virials, batch.weight, batch.virials_weight
             )
         if output.get("dipole") is not None and batch.dipole is not None:
+            import os
+
+            if os.environ.get("USE_PBC_DIPOLE", "false").lower() in (
+                "1",
+                "true",
+                "yes",
+                "on",
+            ):
+                from mace.tools.utils import shift_ref_dipole
+
+                batch.dipole = shift_ref_dipole(
+                    batch.cell, batch.pbc, batch.dipole, output["dipole"]
+                )
+
             self.mus.append(batch.dipole)
             self.delta_mus.append(batch.dipole - output["dipole"])
             self.delta_mus_per_atom.append(
@@ -668,7 +716,18 @@ class MACELoss(Metric):
                 self.delta_mus,
                 batch.weight,
                 batch.dipole_weight,
-                spread_quantity_vector=False,
+                spread_atoms=False,
+                spread_quantity_vector=True,
+            )
+        if output.get("bec") is not None and batch.bec is not None:
+            self.becs.append(batch.bec)
+            self.delta_becs.append(batch.bec - output["bec"])
+            self.becs_computed += filter_nonzero_weight(
+                batch,
+                self.delta_becs,
+                batch.weight,
+                batch.bec_weight,
+                spread_atoms=True,
             )
         if (
             output.get("polarizability") is not None
@@ -750,6 +809,14 @@ class MACELoss(Metric):
             aux["rmse_mu_per_atom"] = compute_rmse(delta_mus_per_atom)
             aux["rel_rmse_mu"] = compute_rel_rmse(delta_mus, mus)
             aux["q95_mu"] = compute_q95(delta_mus)
+        if self.becs_computed:
+            becs = self.convert(self.becs)
+            delta_becs = self.convert(self.delta_becs)
+            aux["mae_bec"] = compute_mae(delta_becs)
+            aux["rel_mae_bec"] = compute_rel_mae(delta_becs, becs)
+            aux["rmse_bec"] = compute_rmse(delta_becs)
+            aux["rel_rmse_bec"] = compute_rel_rmse(delta_becs, becs)
+            aux["q95_bec"] = compute_q95(delta_becs)
         if self.polarizability_computed:
             delta_polarizability = self.convert(self.delta_polarizability)
             delta_polarizability_per_atom = self.convert(

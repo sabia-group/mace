@@ -8,13 +8,11 @@ import dataclasses
 import logging
 import os
 import re
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import torch
 
-from .torch_tools import TensorDict
-
-Checkpoint = Dict[str, TensorDict]
+Checkpoint = Dict[str, Any]
 
 
 @dataclasses.dataclass
@@ -22,16 +20,20 @@ class CheckpointState:
     model: torch.nn.Module
     optimizer: torch.optim.Optimizer
     lr_scheduler: torch.optim.lr_scheduler.ExponentialLR
+    swa_model: Optional[torch.nn.Module] = None
 
 
 class CheckpointBuilder:
     @staticmethod
     def create_checkpoint(state: CheckpointState) -> Checkpoint:
-        return {
+        checkpoint = {
             "model": state.model.state_dict(),
             "optimizer": state.optimizer.state_dict(),
             "lr_scheduler": state.lr_scheduler.state_dict(),
         }
+        if state.swa_model is not None:
+            checkpoint["swa_model"] = state.swa_model.state_dict()
+        return checkpoint
 
     @staticmethod
     def load_checkpoint(
@@ -40,6 +42,22 @@ class CheckpointBuilder:
         state.model.load_state_dict(checkpoint["model"], strict=strict)  # type: ignore
         state.optimizer.load_state_dict(checkpoint["optimizer"])
         state.lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
+        if state.swa_model is not None:
+            if "swa_model" in checkpoint:
+                state.swa_model.load_state_dict(checkpoint["swa_model"], strict=strict)
+            else:
+                logging.warning(
+                    "Checkpoint has no SWA state; initializing the SWA model from "
+                    "the checkpoint model."
+                )
+                if hasattr(state.swa_model, "module"):
+                    state.swa_model.module.load_state_dict(  # type: ignore[union-attr]
+                        state.model.state_dict(), strict=strict
+                    )
+                else:
+                    state.swa_model.load_state_dict(
+                        state.model.state_dict(), strict=strict
+                    )
 
 
 @dataclasses.dataclass
