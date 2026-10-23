@@ -224,13 +224,20 @@ def run(args) -> None:
             ), "average atomic energies cannot be used for multiheads finetuning"
             if not args.force_mh_ft_lr:
                 logging.info(
-                    "Multihead finetuning mode, setting learning rate to 0.0001 and EMA to True. To use a different learning rate, set --force_mh_ft_lr=True."
+                    "Multihead finetuning mode, setting stage-one learning rate to "
+                    "0.0001, stage-two learning rate to 0.00001, and EMA to True. "
+                    "To use different learning rates, set --force_mh_ft_lr=True."
                 )
                 args.lr = 0.0001
+                args.swa_lr = 0.00001
                 args.ema = True
                 args.ema_decay = 0.99999
             logging.info(
-                "Using multiheads finetuning mode, setting learning rate to 0.0001 and EMA to True"
+                "Using multiheads finetuning mode with stage-one learning rate %s, "
+                "stage-two learning rate %s, and EMA=%s",
+                args.lr,
+                args.swa_lr,
+                args.ema,
             )
         if hasattr(model_foundation, "heads"):
             if len(model_foundation.heads) > 1:
@@ -880,14 +887,24 @@ def run(args) -> None:
     if args.restart_latest:
         try:
             opt_start_epoch = checkpoint_handler.load_latest(
-                state=tools.CheckpointState(model, optimizer, lr_scheduler),
+                state=tools.CheckpointState(
+                    model,
+                    optimizer,
+                    lr_scheduler,
+                    swa.model if swa is not None else None,
+                ),
                 swa=True,
                 device=device,
             )
         except Exception:  # pylint: disable=W0703
             try:
                 opt_start_epoch = checkpoint_handler.load_latest(
-                    state=tools.CheckpointState(model, optimizer, lr_scheduler),
+                    state=tools.CheckpointState(
+                        model,
+                        optimizer,
+                        lr_scheduler,
+                        swa.model if swa is not None else None,
+                    ),
                     swa=False,
                     device=device,
                 )
@@ -1067,8 +1084,9 @@ def run(args) -> None:
             break
 
     for swa_eval in swas:
+        swa_model = swa.model if swa_eval and swa is not None else None
         epoch = checkpoint_handler.load_latest(
-            state=tools.CheckpointState(model, optimizer, lr_scheduler),
+            state=tools.CheckpointState(model, optimizer, lr_scheduler, swa_model),
             swa=swa_eval,
             device=device,
         )
@@ -1078,8 +1096,13 @@ def run(args) -> None:
             # after param.requires_grad = False was called before evaluating stage-one model
             for param in model.parameters():
                 param.requires_grad = True
-            distributed_model = DDP(model, device_ids=[local_rank])
-        model_to_evaluate = model if not args.distributed else distributed_model
+            distributed_model = DDP(
+                swa_model if swa_model is not None else model,
+                device_ids=[local_rank],
+            )
+        model_to_evaluate = (
+            swa_model if swa_model is not None else model
+        ) if not args.distributed else distributed_model
         if swa_eval:
             logging.info(f"Loaded Stage two model from epoch {epoch} for evaluation")
         else:
@@ -1092,16 +1115,18 @@ def run(args) -> None:
             else:
                 model_path = Path(args.checkpoints_dir) / (tag + ".model")
             logging.info(f"Saving model to {model_path}")
-            model_to_save = deepcopy(model)
+            model_to_save = deepcopy(
+                swa_model if swa_model is not None else model
+            )
             if args.lora:
                 logging.info("Merging LoRA weights into base model")
                 merge_lora_weights(model_to_save)
             if args.enable_cueq and not args.only_cueq:
                 logging.info("RUNING CUEQ TO E3NN")
-                model_to_save = run_cueq_to_e3nn(deepcopy(model), device=device)
+                model_to_save = run_cueq_to_e3nn(deepcopy(model_to_save), device=device)
             if args.enable_oeq:
                 logging.info("RUNING OEQ TO E3NN")
-                model_to_save = run_oeq_to_e3nn(deepcopy(model), device=device)
+                model_to_save = run_oeq_to_e3nn(deepcopy(model_to_save), device=device)
             if args.save_cpu:
                 model_to_save = model_to_save.to("cpu")
             torch.save(model_to_save, model_path)

@@ -233,9 +233,6 @@ def train(
                 swa_start = False
                 keep_last = True
             loss_fn = swa.loss_fn
-            swa.model.update_parameters(model)
-            if epoch > start_epoch:
-                swa.scheduler.step()
 
         # Train
         if distributed:
@@ -257,16 +254,31 @@ def train(
             distributed_model=distributed_model,
             rank=rank,
         )
+        if swa is not None and epoch >= swa.start:
+            # Average the same EMA parameters used for validation and checkpointing.
+            param_context = (
+                ema.average_parameters() if ema is not None else nullcontext()
+            )
+            with param_context:
+                swa.model.update_parameters(model)
+            # Step after the optimizer has taken an epoch of updates. In particular,
+            # this avoids advancing SWALR before its first optimizer step.
+            swa.scheduler.step()
         if distributed:
             torch.distributed.barrier()
 
         # Validate
         if epoch % eval_interval == 0:
+            stage_two_active = swa is not None and epoch >= swa.start
             model_to_evaluate = (
-                model if distributed_model is None else distributed_model
+                swa.model
+                if stage_two_active
+                else model if distributed_model is None else distributed_model
             )
             param_context = (
-                ema.average_parameters() if ema is not None else nullcontext()
+                nullcontext()
+                if stage_two_active
+                else ema.average_parameters() if ema is not None else nullcontext()
             )
             if "ScheduleFree" in type(optimizer).__name__:
                 optimizer.eval()
@@ -331,7 +343,12 @@ def train(
                         )
                         with param_context:
                             checkpoint_handler.save(
-                                state=CheckpointState(model, optimizer, lr_scheduler),
+                                state=CheckpointState(
+                                    model,
+                                    optimizer,
+                                    lr_scheduler,
+                                    swa.model if swa is not None else None,
+                                ),
                                 epochs=epoch,
                                 keep_last=True,
                             )
@@ -343,7 +360,12 @@ def train(
                     )
                     with param_context:
                         checkpoint_handler.save(
-                            state=CheckpointState(model, optimizer, lr_scheduler),
+                            state=CheckpointState(
+                                model,
+                                optimizer,
+                                lr_scheduler,
+                                swa.model if swa is not None else None,
+                            ),
                             epochs=epoch,
                             keep_last=keep_last,
                         )

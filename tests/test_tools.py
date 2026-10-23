@@ -4,6 +4,7 @@ import numpy as np
 import torch
 import torch.nn.functional
 from torch import nn, optim
+from torch.optim.swa_utils import AveragedModel
 
 from mace.tools import (
     AtomicNumberTable,
@@ -46,3 +47,40 @@ def test_save_load():
 
         handler.load_latest(state=CheckpointState(model, optimizer, scheduler))
         assert np.isclose(optimizer.param_groups[0]["lr"], initial_lr)
+
+
+def test_save_load_swa_model():
+    model = MyModel()
+    optimizer = optim.SGD(model.parameters(), lr=0.001)
+    scheduler = optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=0.99)
+    swa_model = AveragedModel(model)
+
+    with torch.no_grad():
+        for parameter in model.parameters():
+            parameter.fill_(1.0)
+    swa_model.update_parameters(model)
+    with torch.no_grad():
+        for parameter in model.parameters():
+            parameter.fill_(3.0)
+    swa_model.update_parameters(model)
+
+    expected_state = {
+        name: tensor.clone() for name, tensor in swa_model.state_dict().items()
+    }
+    with tempfile.TemporaryDirectory() as directory:
+        handler = CheckpointHandler(
+            directory=directory, tag="test", keep=True, swa_start=1
+        )
+        handler.save(
+            state=CheckpointState(model, optimizer, scheduler, swa_model), epochs=1
+        )
+
+        with torch.no_grad():
+            for parameter in swa_model.parameters():
+                parameter.zero_()
+        handler.load_latest(
+            state=CheckpointState(model, optimizer, scheduler, swa_model), swa=True
+        )
+
+    for name, tensor in swa_model.state_dict().items():
+        assert torch.equal(tensor, expected_state[name])
