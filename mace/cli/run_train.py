@@ -73,6 +73,7 @@ from mace.tools.scripts_utils import (
     print_git_commit,
     remove_pt_head,
     setup_wandb,
+    unwrap_swa_model,
 )
 from mace.tools.tables_utils import create_error_table
 from mace.tools.utils import AtomicNumberTable
@@ -1116,7 +1117,7 @@ def run(args) -> None:
                 model_path = Path(args.checkpoints_dir) / (tag + ".model")
             logging.info(f"Saving model to {model_path}")
             model_to_save = deepcopy(
-                swa_model if swa_model is not None else model
+                unwrap_swa_model(swa_model) if swa_model is not None else model
             )
             if args.lora:
                 logging.info("Merging LoRA weights into base model")

@@ -12,6 +12,7 @@ from mace.tools import (
     CheckpointState,
     atomic_numbers_to_indices,
 )
+from mace.tools.scripts_utils import unwrap_swa_model
 
 
 def test_atomic_number_table():
@@ -84,3 +85,11 @@ def test_save_load_swa_model():
 
     for name, tensor in swa_model.state_dict().items():
         assert torch.equal(tensor, expected_state[name])
+
+
+def test_unwrap_swa_model():
+    model = MyModel()
+    swa_model = AveragedModel(model)
+
+    assert unwrap_swa_model(model) is model
+    assert unwrap_swa_model(swa_model) is swa_model.module
