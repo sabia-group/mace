@@ -31,6 +31,13 @@ class SubsetCollection:
     tests: List[Tuple[str, data.Configurations]]
 
 
+def unwrap_swa_model(model: torch.nn.Module) -> torch.nn.Module:
+    """Return the serializable MACE model stored by an SWA wrapper."""
+    if isinstance(model, AveragedModel):
+        return model.module
+    return model
+
+
 def log_dataset_contents(dataset: data.Configurations, dataset_name: str) -> None:
     log_string = f"{dataset_name} ["
     for prop_name in dataset[0].properties.keys():
