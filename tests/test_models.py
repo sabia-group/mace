@@ -1,4 +1,7 @@
+from types import SimpleNamespace
+
 import numpy as np
+import pytest
 import torch
 import torch.nn.functional
 from ase import build
@@ -8,8 +11,26 @@ from scipy.spatial.transform import Rotation as R
 
 from mace import data, modules, tools
 from mace.tools import torch_geometric
+from mace.tools.model_script_utils import _build_model
 
 torch.set_default_dtype(torch.float64)
+
+
+@pytest.mark.parametrize("model", ["EnergyDipoleMACE", "LREnergyDipoleMACE"])
+@pytest.mark.parametrize("distance_transform", ["Agnesi", "Soft"])
+def test_dipole_models_reject_unsupported_distance_transforms(
+    model, distance_transform
+):
+    args = SimpleNamespace(
+        model=model,
+        loss="energy_forces_dipole",
+        distance_transform=distance_transform,
+    )
+
+    with pytest.raises(ValueError, match="does not support distance transforms"):
+        _build_model(args, None, None, ["Default"])
+
+
 config = data.Configuration(
     atomic_numbers=np.array([8, 1, 1]),
     positions=np.array(

@@ -257,6 +257,13 @@ def _parse_literal_or_none(value):
 def _build_model(
     args, model_config, model_config_foundation, heads
 ):  # pylint: disable=too-many-return-statements
+    if args.model in ("EnergyDipoleMACE", "LREnergyDipoleMACE") and (
+        args.distance_transform not in (None, "None")
+    ):
+        raise ValueError(
+            f"{args.model} does not support distance transforms. "
+            "Set distance_transform to None."
+        )
     if args.loss == "pes+dipole+piezo" and args.model not in (
         "EnergyDipoleMACE",
         "LREnergyDipoleMACE",
