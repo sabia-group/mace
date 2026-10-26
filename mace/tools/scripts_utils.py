@@ -747,6 +747,7 @@ def get_loss_fn(
             forces_weight=args.forces_weight,
             stress_weight=args.stress_weight,
             dipole_weight=args.dipole_weight,
+            bec_weight=args.bec_weight,
             piezoelectric_weight=args.piezoelectric_weight,
         )
     else:
@@ -853,6 +854,7 @@ def get_swa(
             forces_weight=args.swa_forces_weight,
             stress_weight=args.swa_stress_weight,
             dipole_weight=args.swa_dipole_weight,
+            bec_weight=args.swa_bec_weight,
             piezoelectric_weight=args.swa_piezoelectric_weight,
         )
         logging.info(
