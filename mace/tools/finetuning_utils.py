@@ -14,9 +14,13 @@ def load_foundations_elements(
     use_scale=True,
     max_L=2,
     default_dtype: Optional[torch.dtype] = None,
+    preserve_atomic_energies: bool = False,
 ):
     """
     Load the foundations of a model into a model for fine-tuning.
+
+    When ``preserve_atomic_energies`` is true, retain the target model's
+    configured E0 values instead of copying the foundation model's values.
     """
     assert model_foundations.r_max == model.r_max
     z_table = AtomicNumberTable([int(z) for z in model_foundations.atomic_numbers])
@@ -355,6 +359,8 @@ def load_foundations_elements(
         if name not in model_state:
             continue
         if not load_readout and name.startswith("readouts."):
+            continue
+        if preserve_atomic_energies and name.startswith("atomic_energies_fn."):
             continue
         if model_state[name].shape != param.shape:
             continue

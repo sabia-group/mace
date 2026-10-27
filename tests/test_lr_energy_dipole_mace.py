@@ -250,6 +250,28 @@ def test_finetuning_from_energy_dipole_foundation(model_config):
     assert torch.equal(loaded.charge_readout.weight, charge_readout_before)
 
 
+def test_finetuning_preserves_configured_atomic_energies(model_config):
+    foundation_config = deepcopy(model_config)
+    foundation_config["atomic_energies"] = np.array([-1.0, -2.0])
+    target_config = deepcopy(model_config)
+    target_config["atomic_energies"] = np.array([-10.0, -20.0])
+    foundation = modules.EnergyDipoleMACE(**foundation_config)
+    target = modules.LREnergyDipoleMACE(**target_config)
+
+    loaded = load_foundations_elements(
+        model=target,
+        model_foundations=foundation,
+        table=tools.AtomicNumberTable(model_config["atomic_numbers"]),
+        max_L=model_config["hidden_irreps"].lmax,
+        preserve_atomic_energies=True,
+    )
+
+    assert torch.equal(
+        loaded.atomic_energies_fn.atomic_energies,
+        torch.tensor([-10.0, -20.0]),
+    )
+
+
 def test_actual_final_charges_are_conserved_for_a_batch(model_config):
     model = modules.LREnergyDipoleMACE(**model_config)
     configs = [

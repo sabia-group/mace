@@ -100,7 +100,6 @@ def configure_model(
         "ScaleShiftMACE",
         "MACELES",
         "PolarMACE",
-        "LREnergyDipoleMACE",
     ]:
         logging.info("Loading FOUNDATION model")
         model_config_foundation = extract_config_mace_model(model_foundation)
@@ -223,6 +222,7 @@ def configure_model(
             load_readout=args.foundation_filter_elements,
             max_L=args.max_L,
             default_dtype=dtype_dict.get(args.default_dtype, torch.float64),
+            preserve_atomic_energies=args.model == "LREnergyDipoleMACE",
         )
 
     return model, output_args
