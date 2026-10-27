@@ -100,6 +100,7 @@ def configure_model(
         "ScaleShiftMACE",
         "MACELES",
         "PolarMACE",
+        "LREnergyDipoleMACE",
     ]:
         logging.info("Loading FOUNDATION model")
         model_config_foundation = extract_config_mace_model(model_foundation)
